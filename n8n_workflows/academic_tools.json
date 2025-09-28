@@ -1,0 +1,316 @@
+{
+  "name": "Universidad Austral - Academic Tools",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "academic/horarios",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-horarios",
+      "name": "Webhook Horarios",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "academic-horarios"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "academic/inscripciones",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-inscripciones",
+      "name": "Webhook Inscripciones",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 500],
+      "webhookId": "academic-inscripciones"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "academic/profesores",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-profesores",
+      "name": "Webhook Profesores",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 700],
+      "webhookId": "academic-profesores"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "academic/aulas",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-aulas",
+      "name": "Webhook Aulas",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 900],
+      "webhookId": "academic-aulas"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-horarios",
+              "leftValue": "={{ $json.data.webhook_path }}",
+              "rightValue": "academic/horarios",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "route-academic",
+      "name": "Route Academic Requests",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 500]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT h.*, m.nombre as materia_nombre, p.nombre as profesor_nombre, a.nombre as aula_nombre\nFROM horarios h\nJOIN materias m ON h.materia_id = m.id\nJOIN profesores p ON h.profesor_id = p.id\nJOIN aulas a ON h.aula_id = a.id\nWHERE h.alumno_id = {{ $json.data.alumno_id }}\n{{ $json.data.materia_nombre ? 'AND m.nombre ILIKE \\'%' + $json.data.materia_nombre + '%\\'' : '' }}\n{{ $json.data.dia ? 'AND h.dia = \\'' + $json.data.dia + '\\'' : '' }}\nORDER BY h.dia, h.hora_inicio",
+        "options": {}
+      },
+      "id": "query-horarios",
+      "name": "Query Horarios",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [680, 300],
+      "credentials": {
+        "postgres": {
+          "id": "universidad-db",
+          "name": "Universidad Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT m.*, c.nombre as comision_nombre\nFROM inscripciones i\nJOIN materias m ON i.materia_id = m.id\nJOIN comisiones c ON i.comision_id = c.id\nWHERE i.alumno_id = {{ $json.data.alumno_id }}\nAND i.estado = 'activa'\nORDER BY m.nombre",
+        "options": {}
+      },
+      "id": "query-inscripciones",
+      "name": "Query Inscripciones",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [680, 500],
+      "credentials": {
+        "postgres": {
+          "id": "universidad-db",
+          "name": "Universidad Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT p.*, STRING_AGG(m.nombre, ', ') as materias\nFROM profesores p\nLEFT JOIN horarios h ON p.id = h.profesor_id\nLEFT JOIN materias m ON h.materia_id = m.id\nWHERE 1=1\n{{ $json.data.materia ? 'AND m.nombre ILIKE \\'%' + $json.data.materia + '%\\'' : '' }}\n{{ $json.data.nombre_profesor ? 'AND p.nombre ILIKE \\'%' + $json.data.nombre_profesor + '%\\'' : '' }}\nGROUP BY p.id, p.nombre, p.email\nORDER BY p.nombre",
+        "options": {}
+      },
+      "id": "query-profesores",
+      "name": "Query Profesores",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [680, 700],
+      "credentials": {
+        "postgres": {
+          "id": "universidad-db",
+          "name": "Universidad Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT a.*, e.nombre as edificio_nombre\nFROM aulas a\nJOIN edificios e ON a.edificio_id = e.id\nWHERE 1=1\n{{ $json.data.materia ? 'AND a.id IN (SELECT DISTINCT h.aula_id FROM horarios h JOIN materias m ON h.materia_id = m.id WHERE m.nombre ILIKE \\'%' + $json.data.materia + '%\\')' : '' }}\n{{ $json.data.aula ? 'AND a.nombre ILIKE \\'%' + $json.data.aula + '%\\'' : '' }}\nORDER BY a.nombre",
+        "options": {}
+      },
+      "id": "query-aulas",
+      "name": "Query Aulas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [680, 900],
+      "credentials": {
+        "postgres": {
+          "id": "universidad-db",
+          "name": "Universidad Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"horarios\": $json.map(item => ({\n    \"materia\": item.materia_nombre,\n    \"dia\": item.dia,\n    \"hora_inicio\": item.hora_inicio,\n    \"hora_fin\": item.hora_fin,\n    \"aula\": item.aula_nombre,\n    \"modalidad\": item.modalidad,\n    \"profesor\": item.profesor_nombre\n  }))\n} }}",
+        "options": {}
+      },
+      "id": "response-horarios",
+      "name": "Response Horarios",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"materias\": $json.map(item => ({\n    \"nombre\": item.nombre,\n    \"comision\": item.comision_nombre,\n    \"creditos\": item.creditos,\n    \"estado\": \"Cursando\"\n  }))\n} }}",
+        "options": {}
+      },
+      "id": "response-inscripciones",
+      "name": "Response Inscripciones",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"profesor\": $json[0].nombre,\n  \"email\": $json[0].email,\n  \"materias\": $json[0].materias ? $json[0].materias.split(', ') : []\n} }}",
+        "options": {}
+      },
+      "id": "response-profesores",
+      "name": "Response Profesores",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 700]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"aula\": $json[0].nombre,\n  \"edificio\": $json[0].edificio_nombre,\n  \"piso\": $json[0].piso,\n  \"capacidad\": $json[0].capacidad\n} }}",
+        "options": {}
+      },
+      "id": "response-aulas",
+      "name": "Response Aulas",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 900]
+    }
+  ],
+  "connections": {
+    "webhook-horarios": {
+      "main": [
+        [
+          {
+            "node": "query-horarios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook-inscripciones": {
+      "main": [
+        [
+          {
+            "node": "query-inscripciones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook-profesores": {
+      "main": [
+        [
+          {
+            "node": "query-profesores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook-aulas": {
+      "main": [
+        [
+          {
+            "node": "query-aulas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "query-horarios": {
+      "main": [
+        [
+          {
+            "node": "response-horarios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "query-inscripciones": {
+      "main": [
+        [
+          {
+            "node": "response-inscripciones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "query-profesores": {
+      "main": [
+        [
+          {
+            "node": "response-profesores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "query-aulas": {
+      "main": [
+        [
+          {
+            "node": "response-aulas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-27T10:00:00.000Z",
+      "updatedAt": "2024-10-27T10:00:00.000Z",
+      "id": "academic",
+      "name": "Academic"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2024-10-27T10:00:00.000Z",
+  "versionId": "1"
+}
