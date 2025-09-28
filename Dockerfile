@@ -10,12 +10,13 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar requirements
+COPY requirements_simple.txt .
 COPY requirements.txt .
 
 # Instalar dependencias de Python
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements_simple.txt
 
-# Copiar código de la aplicación
+# Copiar cï¿½digo de la aplicaciï¿½n
 COPY . .
 
 # Crear directorio para logs
@@ -24,5 +25,5 @@ RUN mkdir -p /app/logs
 # Exponer puerto
 EXPOSE 8000
 
-# Comando para ejecutar la aplicación
-CMD ["python", "src/core/main_supervisor.py"]
+# Comando para ejecutar la aplicaciï¿½n
+CMD ["python", "main_simple.py"]

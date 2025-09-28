@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # Aplicación principal
+  # Aplicaciï¿½n principal
   university-agent:
     build: .
     container_name: university_agent
@@ -42,7 +42,7 @@ services:
       - university_network
     restart: unless-stopped
 
-  # Redis para caché y sesiones
+  # Redis para cachï¿½ y sesiones
   redis:
     image: redis:7-alpine
     container_name: university_redis
@@ -55,7 +55,7 @@ services:
     restart: unless-stopped
     command: redis-server --appendonly yes
 
-  # n8n para automatización
+  # n8n para automatizaciï¿½n
   n8n:
     image: n8nio/n8n:latest
     container_name: university_n8n
