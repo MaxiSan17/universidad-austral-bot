@@ -1,0 +1,4 @@
+2025-09-25 20:13:39,181 - app.utils.logger - INFO - Logging configurado - Nivel: INFO
+2025-09-25 20:22:07,646 - app.utils.logger - INFO - Logging configurado - Nivel: INFO
+2025-09-25 20:22:07,648 - app.main - INFO - Universidad Austral Bot iniciando...
+2025-09-25 20:22:07,648 - app.main - INFO - Ambiente: development
