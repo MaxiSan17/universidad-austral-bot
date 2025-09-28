@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  # Aplicación principal
+  university-agent:
+    build: .
+    container_name: university_agent
+    ports:
+      - "8000:8000"
+    environment:
+      - LLM_MODEL=${LLM_MODEL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CHATWOOT_URL=${CHATWOOT_URL}
+      - CHATWOOT_API_TOKEN=${CHATWOOT_API_TOKEN}
+      - CHATWOOT_ACCOUNT_ID=${CHATWOOT_ACCOUNT_ID}
+      - N8N_WEBHOOK_URL=http://n8n:5678/webhook
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/universidad_austral
+    depends_on:
+      - postgres
+      - redis
+      - n8n
+    networks:
+      - university_network
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs
+
+  # Base de datos PostgreSQL
+  postgres:
+    image: postgres:16-alpine
+    container_name: university_postgres
+    environment:
+      POSTGRES_DB: universidad_austral
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - university_network
+    restart: unless-stopped
+
+  # Redis para caché y sesiones
+  redis:
+    image: redis:7-alpine
+    container_name: university_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - university_network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  # n8n para automatización
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: university_n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=admin
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - WEBHOOK_URL=http://n8n:5678
+      - EXECUTIONS_PROCESS=main
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n_workflows:/workflows
+    networks:
+      - university_network
+    restart: unless-stopped
+
+  # Nginx como reverse proxy (opcional)
+  nginx:
+    image: nginx:alpine
+    container_name: university_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - university-agent
+    networks:
+      - university_network
+    restart: unless-stopped
+
+networks:
+  university_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  n8n_data:

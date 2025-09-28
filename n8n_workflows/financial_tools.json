@@ -1,0 +1,397 @@
+{
+  "name": "Universidad Austral - Financial Tools",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "financial/estado-cuenta",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-estado-cuenta",
+      "name": "Webhook Estado Cuenta",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "financial-estado-cuenta"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "financial/creditos-vu",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-creditos-vu",
+      "name": "Webhook Créditos VU",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 500],
+      "webhookId": "financial-creditos-vu"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "financial/pagos",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-pagos",
+      "name": "Webhook Historial Pagos",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 700],
+      "webhookId": "financial-pagos"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "financial/facturas",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-facturas",
+      "name": "Webhook Facturas",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 900],
+      "webhookId": "financial-facturas"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT d.*, c.nombre as concepto_nombre\nFROM deudas d\nJOIN conceptos_pago c ON d.concepto_id = c.id\nWHERE d.alumno_id = {{ $json.data.alumno_id }}\nAND d.estado IN ('pendiente', 'vencida')\nORDER BY d.vencimiento ASC",
+        "options": {}
+      },
+      "id": "query-deudas",
+      "name": "Query Deudas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": {
+          "id": "universidad-db",
+          "name": "Universidad Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT cv.*, a.nombre as actividad_nombre\nFROM creditos_vu cv\nJOIN actividades_vu a ON cv.actividad_id = a.id\nWHERE cv.alumno_id = {{ $json.data.alumno_id }}\nORDER BY cv.fecha_completado DESC",
+        "options": {}
+      },
+      "id": "query-creditos-vu",
+      "name": "Query Créditos VU",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 500],
+      "credentials": {
+        "postgres": {
+          "id": "universidad-db",
+          "name": "Universidad Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT p.*, c.nombre as concepto_nombre, mp.nombre as metodo_nombre\nFROM pagos p\nJOIN conceptos_pago c ON p.concepto_id = c.id\nJOIN metodos_pago mp ON p.metodo_id = mp.id\nWHERE p.alumno_id = {{ $json.data.alumno_id }}\n{{ $json.data.fecha_desde ? 'AND p.fecha >= \\'' + $json.data.fecha_desde + '\\'' : '' }}\n{{ $json.data.fecha_hasta ? 'AND p.fecha <= \\'' + $json.data.fecha_hasta + '\\'' : '' }}\nORDER BY p.fecha DESC\nLIMIT 20",
+        "options": {}
+      },
+      "id": "query-pagos",
+      "name": "Query Historial Pagos",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 700],
+      "credentials": {
+        "postgres": {
+          "id": "universidad-db",
+          "name": "Universidad Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT f.*, c.nombre as concepto_nombre\nFROM facturas f\nJOIN conceptos_pago c ON f.concepto_id = c.id\nWHERE f.alumno_id = {{ $json.data.alumno_id }}\n{{ $json.data.periodo ? 'AND f.periodo = \\'' + $json.data.periodo + '\\'' : '' }}\n{{ $json.data.tipo ? 'AND c.tipo = \\'' + $json.data.tipo + '\\'' : '' }}\nORDER BY f.fecha_emision DESC\nLIMIT 1",
+        "options": {}
+      },
+      "id": "query-facturas",
+      "name": "Query Facturas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 900],
+      "credentials": {
+        "postgres": {
+          "id": "universidad-db",
+          "name": "Universidad Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT MIN(vencimiento) as proximo_vencimiento, SUM(monto) as monto_total\nFROM deudas\nWHERE alumno_id = {{ $json.data.alumno_id }}\nAND estado = 'pendiente'",
+        "options": {}
+      },
+      "id": "query-resumen-deudas",
+      "name": "Query Resumen Deudas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [680, 300],
+      "credentials": {
+        "postgres": {
+          "id": "universidad-db",
+          "name": "Universidad Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  SUM(creditos) as creditos_actuales,\n  10 as creditos_necesarios,\n  (10 - SUM(creditos)) as faltantes\nFROM creditos_vu\nWHERE alumno_id = {{ $json.data.alumno_id }}\nAND estado = 'completado'",
+        "options": {}
+      },
+      "id": "query-resumen-creditos",
+      "name": "Query Resumen Créditos",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [680, 500],
+      "credentials": {
+        "postgres": {
+          "id": "universidad-db",
+          "name": "Universidad Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combinar datos de deudas y resumen\nconst deudas = $input.first().json;\nconst resumen = $input.last().json[0];\n\nconst response = {\n  deudas: deudas.map(d => ({\n    concepto: d.concepto_nombre,\n    monto: d.monto,\n    vencimiento: d.vencimiento,\n    estado: d.estado\n  })),\n  proximo_vencimiento: resumen?.proximo_vencimiento || null,\n  monto_pendiente: resumen?.monto_total || 0,\n  estado: resumen?.monto_total > 0 ? \"Con deuda\" : \"Al día\"\n};\n\nreturn { json: response };"
+      },
+      "id": "process-estado-cuenta",
+      "name": "Process Estado Cuenta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combinar datos de créditos y resumen\nconst creditos = $input.first().json;\nconst resumen = $input.last().json[0];\n\nconst response = {\n  creditos_actuales: resumen?.creditos_actuales || 0,\n  creditos_necesarios: resumen?.creditos_necesarios || 10,\n  faltantes: resumen?.faltantes || 10,\n  actividades: creditos.map(c => ({\n    nombre: c.actividad_nombre,\n    creditos: c.creditos,\n    estado: c.estado,\n    fecha: c.fecha_completado\n  }))\n};\n\nreturn { json: response };"
+      },
+      "id": "process-creditos-vu",
+      "name": "Process Créditos VU",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "response-estado-cuenta",
+      "name": "Response Estado Cuenta",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "response-creditos-vu",
+      "name": "Response Créditos VU",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"pagos\": $json.map(item => ({\n    \"fecha\": item.fecha,\n    \"concepto\": item.concepto_nombre,\n    \"monto\": item.monto,\n    \"metodo\": item.metodo_nombre,\n    \"comprobante\": item.numero_comprobante\n  })),\n  \"total_pagado\": $json.reduce((sum, item) => sum + item.monto, 0),\n  \"cantidad_pagos\": $json.length\n} }}",
+        "options": {}
+      },
+      "id": "response-pagos",
+      "name": "Response Historial Pagos",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 700]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"factura_url\": $json[0]?.url_archivo || \"No disponible\",\n  \"numero_factura\": $json[0]?.numero_factura || \"N/A\",\n  \"fecha_emision\": $json[0]?.fecha_emision || null,\n  \"monto\": $json[0]?.monto || 0,\n  \"vencimiento\": $json[0]?.vencimiento || null\n} }}",
+        "options": {}
+      },
+      "id": "response-facturas",
+      "name": "Response Facturas",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 900]
+    }
+  ],
+  "connections": {
+    "webhook-estado-cuenta": {
+      "main": [
+        [
+          {
+            "node": "query-deudas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook-creditos-vu": {
+      "main": [
+        [
+          {
+            "node": "query-creditos-vu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook-pagos": {
+      "main": [
+        [
+          {
+            "node": "query-pagos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook-facturas": {
+      "main": [
+        [
+          {
+            "node": "query-facturas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "query-deudas": {
+      "main": [
+        [
+          {
+            "node": "query-resumen-deudas",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "process-estado-cuenta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "query-creditos-vu": {
+      "main": [
+        [
+          {
+            "node": "query-resumen-creditos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "process-creditos-vu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "query-pagos": {
+      "main": [
+        [
+          {
+            "node": "response-pagos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "query-facturas": {
+      "main": [
+        [
+          {
+            "node": "response-facturas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "query-resumen-deudas": {
+      "main": [
+        [
+          {
+            "node": "process-estado-cuenta",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "query-resumen-creditos": {
+      "main": [
+        [
+          {
+            "node": "process-creditos-vu",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "process-estado-cuenta": {
+      "main": [
+        [
+          {
+            "node": "response-estado-cuenta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "process-creditos-vu": {
+      "main": [
+        [
+          {
+            "node": "response-creditos-vu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-10-27T10:00:00.000Z",
+      "updatedAt": "2024-10-27T10:00:00.000Z",
+      "id": "financial",
+      "name": "Financial"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2024-10-27T10:00:00.000Z",
+  "versionId": "1"
+}
