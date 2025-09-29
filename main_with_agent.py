@@ -1,5 +1,5 @@
 """
-Universidad Austral Bot - Con agente básico (Testing Mode)
+Universidad Austral Bot - Con agente OpenAI GPT
 """
 
 from fastapi import FastAPI, Request
@@ -7,7 +7,7 @@ import uvicorn
 import logging
 import httpx
 import os
-from anthropic import Anthropic
+from openai import OpenAI
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -20,10 +20,10 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Cliente de Anthropic
-anthropic_client = None
-if os.getenv("ANTHROPIC_API_KEY"):
-    anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+# Cliente de OpenAI
+openai_client = None
+if os.getenv("OPENAI_API_KEY"):
+    openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Cliente HTTP para Chatwoot
 http_client = httpx.AsyncClient(timeout=30.0)
@@ -63,10 +63,10 @@ async def send_message_to_chatwoot(conversation_id: int, content: str):
         return False
 
 async def process_with_agent(user_message: str) -> str:
-    """Procesar mensaje con Claude"""
+    """Procesar mensaje con GPT"""
     try:
-        if not anthropic_client:
-            return "Bot configurado incorrectamente. Falta ANTHROPIC_API_KEY."
+        if not openai_client:
+            return "Bot configurado incorrectamente. Falta OPENAI_API_KEY."
         
         # Prompt del sistema
         system_prompt = """Sos un asistente virtual de la Universidad Austral en Argentina.
@@ -81,18 +81,18 @@ Respondé de forma amigable, usando el voseo argentino (vos, tenés, podés).
 Si no sabés algo, decilo claramente y sugerí contactar a la secretaría.
 Mantené las respuestas breves y claras."""
 
-        # Llamar a Claude
-        message = anthropic_client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+        # Llamar a GPT
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
             max_tokens=500,
-            system=system_prompt,
             messages=[
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
             ]
         )
         
-        response_text = message.content[0].text
-        logger.info(f"Respuesta de Claude: {response_text[:100]}...")
+        response_text = response.choices[0].message.content
+        logger.info(f"Respuesta de GPT: {response_text[:100]}...")
         
         return response_text
         
@@ -109,7 +109,7 @@ async def health():
     return {
         "status": "healthy",
         "service": "Universidad Austral Bot",
-        "agent": "claude" if anthropic_client else "not_configured"
+        "agent": "gpt-4o" if openai_client else "not_configured"
     }
 
 @app.post("/webhook/chatwoot")
@@ -161,7 +161,7 @@ async def chatwoot_webhook(request: Request):
         }
 
 if __name__ == "__main__":
-    logger.info("Universidad Austral Bot - Iniciando servidor con agente...")
+    logger.info("Universidad Austral Bot - Iniciando servidor con GPT-4o...")
     logger.info("API disponible en: http://0.0.0.0:8000")
     logger.info("Webhook: http://0.0.0.0:8000/webhook/chatwoot")
     
