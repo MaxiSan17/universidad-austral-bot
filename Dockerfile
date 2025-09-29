@@ -26,4 +26,4 @@ RUN mkdir -p /app/logs
 EXPOSE 8000
 
 # Comando para ejecutar la aplicaci�n
-CMD ["python", "main_simple.py"]
+CMD ["python", "main_with_agent.py"]
