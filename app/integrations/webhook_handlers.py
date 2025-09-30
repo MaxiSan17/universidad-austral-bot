@@ -166,31 +166,61 @@ async def chatwoot_webhook(request: Request):
     """
     try:
         payload = await request.json()
+        
+        # ✅ LOG 1: Payload completo recibido
+        logger.info("=" * 80)
+        logger.info("📨 WEBHOOK CHATWOOT RECIBIDO")
+        logger.info(f"Payload completo: {json.dumps(payload, indent=2)}")
+        logger.info("=" * 80)
 
-        # Validar que es un mensaje nuevo
-        if payload.get("event") != "message_created":
+        # ✅ LOG 2: Validación de evento
+        event_type = payload.get("event")
+        logger.info(f"Event type: {event_type}")
+        
+        if event_type != "message_created":
+            logger.warning(f"❌ Evento ignorado: '{event_type}' (esperado: 'message_created')")
             return JSONResponse({"status": "ignored", "reason": "not_a_message"})
 
         # Extraer información del mensaje
         message_data = payload.get("data", {})
         conversation = message_data.get("conversation", {})
         message = message_data.get("message", {})
+        
+        # ✅ LOG 3: Estructura de datos extraídos
+        logger.info(f"Message data keys: {list(message_data.keys())}")
+        logger.info(f"Conversation keys: {list(conversation.keys())}")
+        logger.info(f"Message keys: {list(message.keys())}")
 
-        # Verificar que es un mensaje del usuario (no del bot)
-        if message.get("message_type") != "incoming":
+        # ✅ LOG 4: Validación de tipo de mensaje
+        message_type = message.get("message_type")
+        logger.info(f"Message type: {message_type}")
+        
+        if message_type != "incoming":
+            logger.warning(f"❌ Mensaje ignorado: tipo '{message_type}' (esperado: 'incoming')")
             return JSONResponse({"status": "ignored", "reason": "outgoing_message"})
 
         # Extraer datos necesarios
         session_id = str(conversation.get("id", "unknown"))
         user_message = message.get("content", "")
+        
+        # ✅ LOG 5: Datos finales extraídos
+        logger.info(f"✅ Mensaje válido para procesar:")
+        logger.info(f"   Session ID: {session_id}")
+        logger.info(f"   User message: {user_message}")
+        logger.info(f"   Message length: {len(user_message)} chars")
 
         logger.info(f"Mensaje directo de Chatwoot - Sesión: {session_id}")
         logger.warning("Usando webhook directo de Chatwoot. Se recomienda usar n8n.")
 
-        # Procesar mensaje con el supervisor
+        # ✅ LOG 6: Antes de procesar con supervisor
+        logger.info(f"🤖 Enviando mensaje al supervisor...")
         response = await supervisor_agent.process_message(user_message, session_id)
-
-        logger.info(f"Respuesta generada para sesión {session_id}: {response[:100]}...")
+        
+        # ✅ LOG 7: Respuesta del supervisor
+        logger.info(f"✅ Respuesta del supervisor recibida:")
+        logger.info(f"   Response length: {len(response)} chars")
+        logger.info(f"   First 150 chars: {response[:150]}...")
+        logger.info("=" * 80)
 
         return JSONResponse({
             "status": "success",
@@ -200,7 +230,7 @@ async def chatwoot_webhook(request: Request):
         })
 
     except Exception as e:
-        logger.error(f"Error procesando webhook de Chatwoot: {e}")
+        logger.error(f"❌ ERROR CRÍTICO en webhook Chatwoot: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 @webhook_router.post("/whatsapp")
