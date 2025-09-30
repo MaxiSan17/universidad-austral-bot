@@ -1,6 +1,7 @@
 """
 Factory para crear instancias de LLM con abstracción completa.
 Soporta múltiples proveedores: OpenAI, Anthropic, Google, etc.
+Compatible con LangChain v0.3+
 """
 
 from typing import Optional, Dict, Any
@@ -36,14 +37,16 @@ class OpenAIProvider(LLMProvider):
         return "gpt-4o-mini"
 
     def create_llm(self, **kwargs) -> BaseChatModel:
-        model = kwargs.get("model", self.get_default_model())
-        temperature = kwargs.get("temperature", 0.1)
+        # Extraer parámetros específicos antes de pasar kwargs
+        model = kwargs.pop("model", self.get_default_model())
+        temperature = kwargs.pop("temperature", 0.1)
+        api_key = kwargs.pop("api_key", settings.OPENAI_API_KEY)
 
         return ChatOpenAI(
             model=model,
-            api_key=settings.OPENAI_API_KEY,
+            api_key=api_key,
             temperature=temperature,
-            **kwargs
+            **kwargs  # Resto de argumentos
         )
 
 
@@ -54,12 +57,14 @@ class AnthropicProvider(LLMProvider):
         return "claude-3-5-sonnet-20241022"
 
     def create_llm(self, **kwargs) -> BaseChatModel:
-        model = kwargs.get("model", self.get_default_model())
-        temperature = kwargs.get("temperature", 0.1)
+        # Extraer parámetros específicos antes de pasar kwargs
+        model = kwargs.pop("model", self.get_default_model())
+        temperature = kwargs.pop("temperature", 0.1)
+        api_key = kwargs.pop("api_key", settings.ANTHROPIC_API_KEY)
 
         return ChatAnthropic(
             model=model,
-            api_key=settings.ANTHROPIC_API_KEY,
+            api_key=api_key,
             temperature=temperature,
             **kwargs
         )
@@ -72,12 +77,14 @@ class GoogleProvider(LLMProvider):
         return "gemini-1.5-pro"
 
     def create_llm(self, **kwargs) -> BaseChatModel:
-        model = kwargs.get("model", self.get_default_model())
-        temperature = kwargs.get("temperature", 0.1)
+        # Extraer parámetros específicos antes de pasar kwargs
+        model = kwargs.pop("model", self.get_default_model())
+        temperature = kwargs.pop("temperature", 0.1)
+        api_key = kwargs.pop("google_api_key", settings.GOOGLE_API_KEY)
 
         return ChatGoogleGenerativeAI(
             model=model,
-            google_api_key=settings.GOOGLE_API_KEY,
+            google_api_key=api_key,
             temperature=temperature,
             **kwargs
         )
@@ -131,19 +138,27 @@ class LLMFactory:
         logger.info(f"Creando LLM: provider={provider}, model={model}, temperature={temperature}")
 
         try:
-            return provider_instance.create_llm(
-                model=model,
-                temperature=temperature,
+            # Crear kwargs combinados
+            combined_kwargs = {
+                "model": model,
+                "temperature": temperature,
                 **kwargs
-            )
+            }
+            
+            return provider_instance.create_llm(**combined_kwargs)
+            
         except Exception as e:
             logger.error(f"Error creando LLM: {e}")
-            # Fallback a OpenAI
+            # Fallback a OpenAI con configuración mínima
             logger.info("Usando OpenAI como fallback")
-            return cls._providers["openai"].create_llm(
-                temperature=temperature,
-                **kwargs
-            )
+            try:
+                return cls._providers["openai"].create_llm(
+                    model="gpt-4o-mini",
+                    temperature=temperature
+                )
+            except Exception as fallback_error:
+                logger.error(f"Error en fallback: {fallback_error}")
+                raise
 
     @classmethod
     def _infer_provider_from_config(cls) -> str:
@@ -174,28 +189,29 @@ class LLMFactory:
         # Configuraciones específicas por tipo de agente
         agent_configs = {
             "supervisor": {
-                "temperature": 0.0,  # Más determinista para routing
+                "temperature": 0.0,
                 "model": settings.LLM_MODEL
             },
             "academic": {
-                "temperature": 0.3,  # Creatividad moderada
+                "temperature": 0.3,
                 "model": settings.LLM_MODEL
             },
             "financial": {
-                "temperature": 0.0,  # Muy preciso para datos financieros
+                "temperature": 0.0,
                 "model": settings.LLM_MODEL
             },
             "policies": {
-                "temperature": 0.2,  # Preciso pero con algo de flexibilidad
+                "temperature": 0.2,
                 "model": settings.LLM_MODEL
             },
             "calendar": {
-                "temperature": 0.1,  # Preciso para fechas
+                "temperature": 0.1,
                 "model": settings.LLM_MODEL
             }
         }
 
         config = agent_configs.get(agent_type, {"temperature": 0.1})
+        # Merge con kwargs, dando prioridad a kwargs
         config.update(kwargs)
 
         return cls.create(**config)
