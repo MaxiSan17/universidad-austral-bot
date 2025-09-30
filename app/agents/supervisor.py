@@ -61,12 +61,14 @@ class SupervisorAgent:
 
         # Checkpointing para persistencia (compatible con LangGraph v0.2+)
         try:
-            # Usar SqliteSaver en memoria para desarrollo
-            # En producción, usar SqliteSaver.from_conn_string("path/to/db.sqlite")
-            self.memory = SqliteSaver.from_conn_string(":memory:")
+            # Crear conexión SQLite y luego el saver
+            import sqlite3
+            conn = sqlite3.connect(":memory:", check_same_thread=False)
+            self.memory = SqliteSaver(conn)
             logger.info("Checkpointer SQLite inicializado en memoria")
         except Exception as e:
             logger.error(f"Error inicializando checkpointer: {e}")
+            logger.warning("Continuando sin persistencia de memoria")
             self.memory = None
 
         # Construir el grafo
