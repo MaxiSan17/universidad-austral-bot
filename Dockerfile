@@ -24,5 +24,5 @@ RUN mkdir -p /app/logs
 # Exponer puerto
 EXPOSE 8000
 
-# Comando para ejecutar la aplicación COMPLETA con agentes
+# Comando para ejecutar la aplicación COMPLETA con sistema de agentes
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

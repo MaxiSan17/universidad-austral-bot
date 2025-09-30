@@ -29,29 +29,57 @@ class AgentState(TypedDict):
     confidence_score: float
 
 class SupervisorAgent:
-    """Supervisor LangGraph que orquesta agentes especializados"""
+    """
+    Supervisor LangGraph que orquesta agentes especializados.
+    Compatible con LangGraph v0.2+ y LangChain v0.3+
+    """
 
     def __init__(self):
+        logger.info("Inicializando SupervisorAgent...")
+        
         # Usar LLM factory con abstracción completa
-        self.llm = llm_factory.create_for_agent("supervisor")
+        try:
+            self.llm = llm_factory.create_for_agent("supervisor")
+            logger.info("LLM del supervisor inicializado correctamente")
+        except Exception as e:
+            logger.error(f"Error inicializando LLM del supervisor: {e}")
+            # Fallback a configuración básica
+            self.llm = llm_factory.create(temperature=0.0)
 
         # Inicializar agentes especializados
-        self.agents = {
-            "academic": AcademicAgent(),
-            "financial": FinancialAgent(),
-            "policies": PoliciesAgent(),
-            "calendar": CalendarAgent()
-        }
+        try:
+            self.agents = {
+                "academic": AcademicAgent(),
+                "financial": FinancialAgent(),
+                "policies": PoliciesAgent(),
+                "calendar": CalendarAgent()
+            }
+            logger.info(f"Agentes especializados inicializados: {list(self.agents.keys())}")
+        except Exception as e:
+            logger.error(f"Error inicializando agentes especializados: {e}")
+            self.agents = {}
 
-        # Checkpointing para persistencia (compatible con LangGraph v1)
-        memory = SqliteSaver.from_conn_string(":memory:")
+        # Checkpointing para persistencia (compatible con LangGraph v0.2+)
+        try:
+            # Usar SqliteSaver en memoria para desarrollo
+            # En producción, usar SqliteSaver.from_conn_string("path/to/db.sqlite")
+            self.memory = SqliteSaver.from_conn_string(":memory:")
+            logger.info("Checkpointer SQLite inicializado en memoria")
+        except Exception as e:
+            logger.error(f"Error inicializando checkpointer: {e}")
+            self.memory = None
 
         # Construir el grafo
-        self.workflow = self._build_workflow()
-        self.app = self.workflow.compile(checkpointer=memory)
+        try:
+            self.workflow = self._build_workflow()
+            self.app = self.workflow.compile(checkpointer=self.memory)
+            logger.info("Workflow de LangGraph compilado exitosamente")
+        except Exception as e:
+            logger.error(f"Error construyendo workflow: {e}")
+            raise
 
     def _build_workflow(self) -> StateGraph:
-        """Construye el workflow LangGraph"""
+        """Construye el workflow LangGraph compatible con v0.2+"""
 
         workflow = StateGraph(AgentState)
 
@@ -92,7 +120,7 @@ class SupervisorAgent:
             }
         )
 
-        # Todos los agentes regresan al supervisor
+        # Todos los agentes regresan al supervisor o terminan
         for agent in ["academic", "financial", "policies", "calendar"]:
             workflow.add_conditional_edges(
                 agent,
@@ -135,7 +163,7 @@ class SupervisorAgent:
 
         if dni_match:
             dni = dni_match.group()
-            # Simular autenticación (aquí iría la integración real)
+            # Autenticar usuario
             user = await self._authenticate_user(dni)
 
             if user:
@@ -147,15 +175,15 @@ class SupervisorAgent:
                     "tipo": user.tipo
                 }
 
-                response = f"¡Perfecto, {user.nombre}! 😊 Ya te reconocí.\n\n¿En qué te puedo ayudar hoy?"
+                response = f"¡Perfecto, {user.nombre}! Ya te reconocí.\n\n¿En qué te puedo ayudar hoy?"
                 state["messages"].append(AIMessage(content=response))
                 state["next"] = "supervisor"
             else:
-                response = "Lo siento, no reconozco ese DNI en nuestra base de datos. 😅\n\nPor favor verificá el número."
+                response = "Lo siento, no reconozco ese DNI en nuestra base de datos.\n\nPor favor verificá el número."
                 state["messages"].append(AIMessage(content=response))
                 state["next"] = "authentication"
         else:
-            response = "¡Hola! 👋 Para ayudarte necesito que me pases tu DNI (solo números)."
+            response = "¡Hola! Para ayudarte necesito que me pases tu DNI (solo números)."
             state["messages"].append(AIMessage(content=response))
             state["next"] = "authentication"
 
@@ -166,43 +194,53 @@ class SupervisorAgent:
 
         system_prompt = """Eres el supervisor de un sistema de agentes para la Universidad Austral.
 
-        Tu rol es analizar la consulta del usuario y decidir qué agente especializado debe manejarla:
+Tu rol es analizar la consulta del usuario y decidir qué agente especializado debe manejarla:
 
-        - academic: Consultas sobre horarios, materias, profesores, aulas
-        - financial: Consultas sobre estado de cuenta, pagos, créditos VU
-        - policies: Consultas sobre reglamentos, syllabus, políticas académicas
-        - calendar: Consultas sobre fechas de exámenes, calendario académico
-        - escalation: Cuando necesitas derivar a un humano
+- academic: Consultas sobre horarios, materias, profesores, aulas
+- financial: Consultas sobre estado de cuenta, pagos, créditos VU
+- policies: Consultas sobre reglamentos, syllabus, políticas académicas
+- calendar: Consultas sobre fechas de exámenes, calendario académico
+- escalation: Cuando necesitas derivar a un humano
 
-        Analiza el último mensaje del usuario y decide el agente más apropiado.
-        Responde SOLO con el nombre del agente: academic, financial, policies, calendar, o escalation.
+Analiza el último mensaje del usuario y decide el agente más apropiado.
+Responde SOLO con el nombre del agente: academic, financial, policies, calendar, o escalation.
 
-        Si la consulta no está clara o es general, usa 'academic' como default.
-        """
+Si la consulta no está clara o es general, usa 'academic' como default.
+"""
 
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=state["messages"][-1].content)
-        ]
+        try:
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=state["messages"][-1].content)
+            ]
 
-        response = await self.llm.ainvoke(messages)
-        agent_choice = response.content.strip().lower()
+            response = await self.llm.ainvoke(messages)
+            agent_choice = response.content.strip().lower()
 
-        # Validar la respuesta
-        valid_agents = ["academic", "financial", "policies", "calendar", "escalation"]
-        if agent_choice not in valid_agents:
-            agent_choice = "academic"  # Default
+            # Validar la respuesta
+            valid_agents = ["academic", "financial", "policies", "calendar", "escalation"]
+            if agent_choice not in valid_agents:
+                agent_choice = "academic"  # Default
 
-        state["next"] = agent_choice
-        state["agent_scratchpad"]["supervisor_choice"] = agent_choice
-        state["agent_scratchpad"]["supervisor_reasoning"] = f"Elegí {agent_choice} para: {state['messages'][-1].content[:100]}"
+            state["next"] = agent_choice
+            state["agent_scratchpad"]["supervisor_choice"] = agent_choice
+            state["agent_scratchpad"]["supervisor_reasoning"] = f"Elegí {agent_choice} para: {state['messages'][-1].content[:100]}"
 
-        logger.info(f"Supervisor eligió agente: {agent_choice}")
+            logger.info(f"Supervisor eligió agente: {agent_choice}")
+            
+        except Exception as e:
+            logger.error(f"Error en supervisor node: {e}")
+            # Fallback a agente académico
+            state["next"] = "academic"
+            
         return state
 
     async def _academic_node(self, state: AgentState) -> AgentState:
         """Nodo del agente académico"""
         try:
+            if "academic" not in self.agents:
+                raise Exception("Agente académico no disponible")
+                
             user_message = state["messages"][-1].content
             response = await self.agents["academic"].process_query(
                 query=user_message,
@@ -211,7 +249,7 @@ class SupervisorAgent:
             )
 
             state["messages"].append(AIMessage(content=response))
-            state["confidence_score"] = 0.9  # Alta confianza en respuestas académicas
+            state["confidence_score"] = 0.9
             state["next"] = "END"
 
         except Exception as e:
@@ -224,6 +262,9 @@ class SupervisorAgent:
     async def _financial_node(self, state: AgentState) -> AgentState:
         """Nodo del agente financiero"""
         try:
+            if "financial" not in self.agents:
+                raise Exception("Agente financiero no disponible")
+                
             user_message = state["messages"][-1].content
             response = await self.agents["financial"].process_query(
                 query=user_message,
@@ -232,7 +273,7 @@ class SupervisorAgent:
             )
 
             state["messages"].append(AIMessage(content=response))
-            state["confidence_score"] = 0.95  # Muy alta confianza en datos financieros
+            state["confidence_score"] = 0.95
             state["next"] = "END"
 
         except Exception as e:
@@ -245,6 +286,9 @@ class SupervisorAgent:
     async def _policies_node(self, state: AgentState) -> AgentState:
         """Nodo del agente de políticas"""
         try:
+            if "policies" not in self.agents:
+                raise Exception("Agente de políticas no disponible")
+                
             user_message = state["messages"][-1].content
             response = await self.agents["policies"].process_query(
                 query=user_message,
@@ -253,7 +297,7 @@ class SupervisorAgent:
             )
 
             state["messages"].append(AIMessage(content=response))
-            state["confidence_score"] = 0.85  # Buena confianza en políticas
+            state["confidence_score"] = 0.85
             state["next"] = "END"
 
         except Exception as e:
@@ -266,6 +310,9 @@ class SupervisorAgent:
     async def _calendar_node(self, state: AgentState) -> AgentState:
         """Nodo del agente de calendario"""
         try:
+            if "calendar" not in self.agents:
+                raise Exception("Agente de calendario no disponible")
+                
             user_message = state["messages"][-1].content
             response = await self.agents["calendar"].process_query(
                 query=user_message,
@@ -274,7 +321,7 @@ class SupervisorAgent:
             )
 
             state["messages"].append(AIMessage(content=response))
-            state["confidence_score"] = 0.9  # Alta confianza en fechas
+            state["confidence_score"] = 0.9
             state["next"] = "END"
 
         except Exception as e:
@@ -288,11 +335,11 @@ class SupervisorAgent:
         """Nodo de escalación a humanos"""
         user_name = state["user_info"].get("nombre", "Usuario")
 
-        response = f"""¡Hola {user_name}! 👥
+        response = f"""¡Hola {user_name}!
 
 Te estoy derivando con nuestro equipo de atención que te va a poder ayudar mejor.
 
-Te van a contactar en breve para resolver tu consulta. 📞
+Te van a contactar en breve para resolver tu consulta.
 
 ¿Hay algo más en lo que te pueda asistir mientras tanto?"""
 
@@ -322,7 +369,7 @@ Te van a contactar en breve para resolver tu consulta. 📞
         return "END"
 
     async def _authenticate_user(self, dni: str):
-        """Simula autenticación de usuario (mock)"""
+        """Simula autenticación de usuario (mock para desarrollo)"""
         # Mock users para desarrollo
         mock_users = {
             "12345678": {
@@ -348,7 +395,16 @@ Te van a contactar en breve para resolver tu consulta. 📞
         return None
 
     async def process_message(self, message: str, session_id: str) -> str:
-        """Procesa un mensaje a través del workflow LangGraph"""
+        """
+        Procesa un mensaje a través del workflow LangGraph.
+        
+        Args:
+            message: Mensaje del usuario
+            session_id: ID de sesión único
+            
+        Returns:
+            Respuesta del sistema
+        """
         try:
             # Estado inicial
             initial_state: AgentState = {
@@ -361,7 +417,7 @@ Te van a contactar en breve para resolver tu consulta. 📞
                 "confidence_score": 1.0
             }
 
-            # Configuración del thread
+            # Configuración del thread (compatible con LangGraph v0.2+)
             config = {"configurable": {"thread_id": session_id}}
 
             # Ejecutar el workflow
@@ -375,7 +431,7 @@ Te van a contactar en breve para resolver tu consulta. 📞
                 return "Lo siento, hubo un problema procesando tu mensaje."
 
         except Exception as e:
-            logger.error(f"Error en SupervisorAgent: {e}")
+            logger.error(f"Error en SupervisorAgent.process_message: {e}", exc_info=True)
             return "Hubo un error técnico. Por favor intentá de nuevo."
 
 # Instancia global del supervisor
