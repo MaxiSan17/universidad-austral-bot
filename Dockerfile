@@ -10,13 +10,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar requirements
-COPY requirements_simple.txt .
 COPY requirements.txt .
 
-# Instalar dependencias de Python
-RUN pip install --no-cache-dir -r requirements_simple.txt
+# Instalar dependencias de Python (usar requirements.txt completo)
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar c�digo de la aplicaci�n
+# Copiar código de la aplicación
 COPY . .
 
 # Crear directorio para logs
@@ -25,5 +24,5 @@ RUN mkdir -p /app/logs
 # Exponer puerto
 EXPOSE 8000
 
-# Comando para ejecutar la aplicaci�n
-CMD ["python", "main_with_agent.py"]
+# Comando para ejecutar la aplicación COMPLETA con agentes
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

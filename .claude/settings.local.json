@@ -4,7 +4,8 @@
       "WebSearch",
       "Bash(mkdir:*)",
       "Bash(pip install:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "WebFetch(domain:docs.langchain.com)"
     ],
     "deny": [],
     "ask": []

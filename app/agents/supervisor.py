@@ -1,14 +1,13 @@
-from typing import Annotated, Literal, TypedDict, Dict, Any, List, Optional
+from typing import Annotated, Literal, Dict, Any, List, Optional
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, END, START
 from langgraph.graph.message import add_messages
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.language_models import BaseChatModel
 from app.config import settings
+from app.core.llm_factory import llm_factory
 from app.session.session_manager import session_manager
 from app.utils.logger import get_logger
 from app.agents.academic_agent import AcademicAgent
@@ -33,7 +32,10 @@ class SupervisorAgent:
     """Supervisor LangGraph que orquesta agentes especializados"""
 
     def __init__(self):
-        self.llm = self._get_llm()
+        # Usar LLM factory con abstracción completa
+        self.llm = llm_factory.create_for_agent("supervisor")
+
+        # Inicializar agentes especializados
         self.agents = {
             "academic": AcademicAgent(),
             "financial": FinancialAgent(),
@@ -41,42 +43,12 @@ class SupervisorAgent:
             "calendar": CalendarAgent()
         }
 
-        # Checkpointing para persistencia
+        # Checkpointing para persistencia (compatible con LangGraph v1)
         memory = SqliteSaver.from_conn_string(":memory:")
 
         # Construir el grafo
         self.workflow = self._build_workflow()
         self.app = self.workflow.compile(checkpointer=memory)
-
-    def _get_llm(self):
-        """Obtiene el LLM configurado"""
-        model = settings.LLM_MODEL.lower()
-
-        if "gpt" in model or "openai" in model:
-            return ChatOpenAI(
-                model=settings.LLM_MODEL,
-                api_key=settings.OPENAI_API_KEY,
-                temperature=0.1
-            )
-        elif "claude" in model or "anthropic" in model:
-            return ChatAnthropic(
-                model=settings.LLM_MODEL,
-                api_key=settings.ANTHROPIC_API_KEY,
-                temperature=0.1
-            )
-        elif "gemini" in model or "google" in model:
-            return ChatGoogleGenerativeAI(
-                model=settings.LLM_MODEL,
-                google_api_key=settings.GOOGLE_API_KEY,
-                temperature=0.1
-            )
-        else:
-            # Default to OpenAI
-            return ChatOpenAI(
-                model="gpt-4o-mini",
-                api_key=settings.OPENAI_API_KEY,
-                temperature=0.1
-            )
 
     def _build_workflow(self) -> StateGraph:
         """Construye el workflow LangGraph"""
