@@ -60,6 +60,7 @@ class SupervisorAgent:
             self.agents = {}
 
         # Checkpointing para persistencia (compatible con LangGraph v0.2+)
+        # TEMPORALMENTE DESACTIVADO por incompatibilidad de versiones
         try:
             # Crear conexión SQLite y luego el saver
             import sqlite3
@@ -70,6 +71,10 @@ class SupervisorAgent:
             logger.error(f"Error inicializando checkpointer: {e}")
             logger.warning("Continuando sin persistencia de memoria")
             self.memory = None
+        
+        # TEMPORAL: Forzar memory a None para evitar errores de compatibilidad
+        self.memory = None
+        logger.warning("Checkpointer desactivado temporalmente por compatibilidad")
 
         # Construir el grafo
         try:
