@@ -140,6 +140,7 @@ class SupervisorAgent:
                 "legajo": user.legajo,
                 "tipo": user.tipo
             }
+            # Usuario autenticado - ir directo al supervisor
             state["next"] = "supervisor"
             return state
 
@@ -167,15 +168,16 @@ class SupervisorAgent:
 
                 response = f"¡Perfecto, {user.nombre}! Ya te reconocí.\n\n¿En qué te puedo ayudar hoy?"
                 state["messages"].append(AIMessage(content=response))
-                state["next"] = "supervisor"
+                # Terminar aquí - NO ir al supervisor automáticamente
+                state["next"] = "END"
             else:
                 response = "Lo siento, no reconozco ese DNI en nuestra base de datos.\n\nPor favor verificá el número."
                 state["messages"].append(AIMessage(content=response))
-                state["next"] = "authentication"
+                state["next"] = "END"
         else:
             response = "¡Hola! Para ayudarte necesito que me pases tu DNI (solo números)."
             state["messages"].append(AIMessage(content=response))
-            state["next"] = "authentication"
+            state["next"] = "END"
 
         return state
 
@@ -407,8 +409,11 @@ Te van a contactar en breve para resolver tu consulta.
                 "confidence_score": 1.0
             }
 
-            # Configuración del thread (compatible con LangGraph v1.0)
-            config = {"configurable": {"thread_id": session_id}}
+            # Configuración del thread con límite de recursión (compatible con LangGraph v1.0)
+            config = {
+                "configurable": {"thread_id": session_id},
+                "recursion_limit": 50  # Aumentar límite de recursión
+            }
 
             # Ejecutar el workflow
             result = await self.app.ainvoke(initial_state, config)
