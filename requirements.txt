@@ -13,8 +13,8 @@ langchain-openai==0.3.4
 langchain-anthropic==0.3.5
 langchain-google-genai==2.0.6
 
-# LangSmith
-langsmith==0.2.7
+# LangSmith - versión requerida por langchain-core 0.3.76
+langsmith==0.3.45
 
 # Base de datos
 asyncpg==0.30.0
