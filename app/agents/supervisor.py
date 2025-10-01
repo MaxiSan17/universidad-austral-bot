@@ -2,7 +2,7 @@ from typing import Annotated, Literal, Dict, Any, List, Optional
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, END, START
 from langgraph.graph.message import add_messages
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.language_models import BaseChatModel
@@ -31,7 +31,7 @@ class AgentState(TypedDict):
 class SupervisorAgent:
     """
     Supervisor LangGraph que orquesta agentes especializados.
-    Compatible con LangGraph v0.2+ y LangChain v0.3+
+    Compatible con LangGraph v1.0 y LangChain v1.0
     """
 
     def __init__(self):
@@ -59,22 +59,13 @@ class SupervisorAgent:
             logger.error(f"Error inicializando agentes especializados: {e}")
             self.agents = {}
 
-        # Checkpointing para persistencia (compatible con LangGraph v0.2+)
-        # TEMPORALMENTE DESACTIVADO por incompatibilidad de versiones
+        # Checkpointing en memoria (LangGraph v1.0)
         try:
-            # Crear conexión SQLite y luego el saver
-            import sqlite3
-            conn = sqlite3.connect(":memory:", check_same_thread=False)
-            self.memory = SqliteSaver(conn)
-            logger.info("Checkpointer SQLite inicializado en memoria")
+            self.memory = MemorySaver()
+            logger.info("Checkpointer en memoria inicializado")
         except Exception as e:
             logger.error(f"Error inicializando checkpointer: {e}")
-            logger.warning("Continuando sin persistencia de memoria")
             self.memory = None
-        
-        # TEMPORAL: Forzar memory a None para evitar errores de compatibilidad
-        self.memory = None
-        logger.warning("Checkpointer desactivado temporalmente por compatibilidad")
 
         # Construir el grafo
         try:
@@ -86,7 +77,7 @@ class SupervisorAgent:
             raise
 
     def _build_workflow(self) -> StateGraph:
-        """Construye el workflow LangGraph compatible con v0.2+"""
+        """Construye el workflow LangGraph compatible con v1.0"""
 
         workflow = StateGraph(AgentState)
 
@@ -424,7 +415,7 @@ Te van a contactar en breve para resolver tu consulta.
                 "confidence_score": 1.0
             }
 
-            # Configuración del thread (compatible con LangGraph v0.2+)
+            # Configuración del thread (compatible con LangGraph v1.0)
             config = {"configurable": {"thread_id": session_id}}
 
             # Ejecutar el workflow
