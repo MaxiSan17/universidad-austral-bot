@@ -118,17 +118,9 @@ class SupervisorAgent:
             }
         )
 
-        # Todos los agentes regresan al supervisor o terminan
+        # Todos los agentes terminan directamente (sin volver al supervisor)
         for agent in ["academic", "financial", "policies", "calendar"]:
-            workflow.add_conditional_edges(
-                agent,
-                self._should_continue,
-                {
-                    "supervisor": "supervisor",
-                    "escalation": "escalation",
-                    "END": END
-                }
-            )
+            workflow.add_edge(agent, END)
 
         # Escalación termina la conversación
         workflow.add_edge("escalation", END)
