@@ -114,11 +114,23 @@ async def n8n_webhook(
         session_id = normalized["session_id"]
         user_message = normalized["message"]
         source = normalized["source"]
+        conversation_id = normalized.get("conversation_id")
 
         logger.info(f"Mensaje desde n8n - Source: {source}, Session: {session_id}")
 
         # Procesar mensaje con el supervisor
         response = await supervisor_agent.process_message(user_message, session_id)
+
+        # Si viene de Chatwoot y tenemos conversation_id, enviar respuesta directamente
+        if conversation_id and settings.CHATWOOT_API_TOKEN:
+            try:
+                await send_message_to_chatwoot(
+                    conversation_id=int(conversation_id),
+                    message=response
+                )
+                logger.info(f"✅ Respuesta enviada a Chatwoot (conversation {conversation_id})")
+            except Exception as e:
+                logger.error(f"❌ Error enviando mensaje a Chatwoot: {e}", exc_info=True)
 
         # Preparar respuesta estructurada para n8n
         response_payload = {
@@ -165,12 +177,18 @@ def _normalize_n8n_payload(raw_payload: Dict[str, Any]) -> Dict[str, str]:
     - Formato completo con session, user, message_data
     - Formato simplificado con session_id, message directamente
     """
-    # Formato simplificado
+    # Formato simplificado directo de n8n
     if "message" in raw_payload and isinstance(raw_payload["message"], str):
+        # Limpiar valores que empiezan con "=" (error común de n8n)
+        message = raw_payload["message"].lstrip("=")
+        conversation_id = raw_payload.get("conversation_id", "").lstrip("=")
+        session_id = conversation_id or raw_payload.get("session_id", "unknown")
+        
         return {
-            "session_id": raw_payload.get("session_id", "unknown"),
-            "message": raw_payload["message"],
-            "source": raw_payload.get("source", "unknown")
+            "session_id": session_id,
+            "message": message,
+            "source": raw_payload.get("source", "n8n"),
+            "conversation_id": conversation_id
         }
 
     # Formato completo
@@ -188,7 +206,8 @@ def _normalize_n8n_payload(raw_payload: Dict[str, Any]) -> Dict[str, str]:
     return {
         "session_id": session_id,
         "message": message_content,
-        "source": raw_payload.get("source", "unknown")
+        "source": raw_payload.get("source", "unknown"),
+        "conversation_id": raw_payload.get("conversation_id")
     }
 
 
