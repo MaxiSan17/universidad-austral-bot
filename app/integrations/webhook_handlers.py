@@ -157,7 +157,6 @@ def _normalize_n8n_payload(raw_payload: Dict[str, Any]) -> Dict[str, str]:
         "source": raw_payload.get("source", "unknown")
     }
 
-
 @webhook_router.post("/chatwoot")
 async def chatwoot_webhook(request: Request):
     """
@@ -172,19 +171,41 @@ async def chatwoot_webhook(request: Request):
         logger.info(f"Payload completo: {json.dumps(payload, indent=2)}")
         logger.info("=" * 80)
 
-        # Validar evento
-        event_type = payload.get("event")
+        # 1) Normalización flexible: soportar formato nativo de Chatwoot
+        #    y también un formato simplificado enviado desde n8n:
+        #    { mensaje, account_id, conversation_id, telefono }
+
+        is_simple = (
+            "mensaje" in payload
+            or "conversation_id" in payload
+            or "telefono" in payload
+            or "account_id" in payload
+        )
+
+        if is_simple:
+            # Construir una vista "tipo Chatwoot" a partir del formato simple
+            event_type = payload.get("event") or "message_created"
+            message_type = payload.get("message_type") or "incoming"
+            content = payload.get("mensaje") or payload.get("content")
+            conversation = {"id": payload.get("conversation_id")}
+            sender = {"phone_number": payload.get("telefono")}
+            account_id = payload.get("account_id")
+        else:
+            # Formato nativo
+            event_type = payload.get("event")
+            message_type = payload.get("message_type")
+            content = payload.get("content")
+            conversation = payload.get("conversation", {})
+            sender = payload.get("sender", {})
+            account = payload.get("account", {})
+            account_id = account.get("id") if isinstance(account, dict) else None
+
         logger.info(f"Event type: {event_type}")
         
+        # Validar evento
         if event_type != "message_created":
             logger.warning(f"❌ Evento ignorado: '{event_type}'")
             return JSONResponse({"status": "ignored", "reason": "not_message_created"})
-
-        # Extraer datos directamente del root (formato real de Chatwoot)
-        message_type = payload.get("message_type")
-        content = payload.get("content")
-        conversation = payload.get("conversation", {})
-        sender = payload.get("sender", {})
         
         # LOG: Datos extraídos
         logger.info(f"Message type: {message_type}")
@@ -221,77 +242,51 @@ async def chatwoot_webhook(request: Request):
         logger.info(f"   First 150 chars: {response[:150]}...")
         logger.info("=" * 80)
 
+        # 4) Intentar enviar la respuesta automáticamente a Chatwoot si hay credenciales
+        try:
+            chatwoot_url = os.getenv("CHATWOOT_URL") or settings.CHATWOOT_URL
+            api_token = os.getenv("CHATWOOT_API_TOKEN") or settings.CHATWOOT_API_TOKEN
+            resolved_account_id = (
+                account_id
+                or os.getenv("CHATWOOT_ACCOUNT_ID")
+                or settings.CHATWOOT_ACCOUNT_ID
+            )
+
+            if chatwoot_url and api_token and resolved_account_id and conversation.get("id"):
+                endpoint = f"{chatwoot_url}/api/v1/accounts/{resolved_account_id}/conversations/{conversation.get('id')}/messages"
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    cw_resp = await client.post(
+                        endpoint,
+                        headers={"api_access_token": api_token, "Content-Type": "application/json"},
+                        json={
+                            "content": response,
+                            "message_type": "outgoing",
+                            "private": False,
+                            "sender": {"type": "bot"}
+                        }
+                    )
+                if cw_resp.status_code >= 200 and cw_resp.status_code < 300:
+                    logger.info("📤 Respuesta enviada a Chatwoot correctamente")
+                else:
+                    logger.warning(f"No se pudo enviar a Chatwoot: {cw_resp.status_code} - {cw_resp.text[:200]}")
+            else:
+                logger.info("Credenciales/IDs de Chatwoot no completas; usar n8n como reenvío")
+        except Exception as send_err:
+            logger.error(f"Error enviando a Chatwoot: {send_err}", exc_info=True)
+
         return JSONResponse({
             "status": "success",
             "session_id": session_id,
             "response_sent": True,
-            "response": response
+            "response": response,
+            # Eco de IDs útiles para n8n → Chatwoot
+            "account_id": account_id,
+            "conversation_id": conversation.get("id")
         })
 
     except Exception as e:
         logger.error(f"❌ ERROR CRÍTICO en webhook Chatwoot: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Error interno del servidor")
-
-@webhook_router.post("/whatsapp")
-async def whatsapp_webhook(request: Request):
-    """Maneja webhooks de WhatsApp Business API"""
-    try:
-        payload = await request.json()
-
-        # Extraer mensajes de WhatsApp
-        messages = payload.get("entry", [{}])[0].get("changes", [{}])[0].get("value", {}).get("messages", [])
-
-        for message in messages:
-            # Extraer información del mensaje
-            phone_number = message.get("from", "")
-            message_text = message.get("text", {}).get("body", "")
-            message_id = message.get("id", "")
-
-            if not message_text:
-                continue
-
-            # Usar el número de teléfono como session_id
-            session_id = f"whatsapp_{phone_number}"
-
-            logger.info(f"Mensaje de WhatsApp - Teléfono: {phone_number}")
-
-            # Procesar mensaje
-            response = await supervisor_agent.process_message(message_text, session_id)
-
-            # Aquí irían las llamadas a la API de WhatsApp para enviar la respuesta
-            logger.info(f"Respuesta para WhatsApp {phone_number}: {response[:100]}...")
-
-        return JSONResponse({"status": "success"})
-
-    except Exception as e:
-        logger.error(f"Error procesando webhook de WhatsApp: {e}")
-        raise HTTPException(status_code=500, detail="Error interno del servidor")
-
-@webhook_router.post("/test")
-async def test_webhook(request: Request):
-    """Endpoint de prueba para desarrollo"""
-    try:
-        payload = await request.json()
-
-        session_id = payload.get("session_id", "test_session")
-        message = payload.get("message", "Hola")
-
-        logger.info(f"Mensaje de prueba - Sesión: {session_id}")
-
-        # Procesar mensaje
-        response = await supervisor_agent.process_message(message, session_id)
-
-        return JSONResponse({
-            "status": "success",
-            "session_id": session_id,
-            "user_message": message,
-            "bot_response": response,
-            "session_stats": session_manager.get_session_stats()
-        })
-
-    except Exception as e:
-        logger.error(f"Error en webhook de prueba: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 @webhook_router.get("/sessions")
 async def get_sessions():
