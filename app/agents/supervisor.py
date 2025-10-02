@@ -364,7 +364,7 @@ Te van a contactar en breve para resolver tu consulta.
         """Simula autenticación de usuario (mock para desarrollo)"""
         # Mock users para desarrollo
         mock_users = {
-            "46732472": {
+            "5491146732472": {
                 "id": 1,
                 "nombre": "Maxi Santoro",
                 "legajo": "L001",
