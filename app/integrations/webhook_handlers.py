@@ -161,64 +161,63 @@ def _normalize_n8n_payload(raw_payload: Dict[str, Any]) -> Dict[str, str]:
 @webhook_router.post("/chatwoot")
 async def chatwoot_webhook(request: Request):
     """
-    Maneja webhooks directos de Chatwoot (legacy).
-    Se recomienda usar n8n como intermediario.
+    Maneja webhooks directos de Chatwoot.
     """
     try:
         payload = await request.json()
         
-        # ✅ LOG 1: Payload completo recibido
+        # LOG: Payload completo recibido
         logger.info("=" * 80)
         logger.info("📨 WEBHOOK CHATWOOT RECIBIDO")
         logger.info(f"Payload completo: {json.dumps(payload, indent=2)}")
         logger.info("=" * 80)
 
-        # ✅ LOG 2: Validación de evento
+        # Validar evento
         event_type = payload.get("event")
         logger.info(f"Event type: {event_type}")
         
         if event_type != "message_created":
-            logger.warning(f"❌ Evento ignorado: '{event_type}' (esperado: 'message_created')")
-            return JSONResponse({"status": "ignored", "reason": "not_a_message"})
+            logger.warning(f"❌ Evento ignorado: '{event_type}'")
+            return JSONResponse({"status": "ignored", "reason": "not_message_created"})
 
-        # Extraer información del mensaje
-        message_data = payload.get("data", {})
-        conversation = message_data.get("conversation", {})
-        message = message_data.get("message", {})
+        # Extraer datos directamente del root (formato real de Chatwoot)
+        message_type = payload.get("message_type")
+        content = payload.get("content")
+        conversation = payload.get("conversation", {})
+        sender = payload.get("sender", {})
         
-        # ✅ LOG 3: Estructura de datos extraídos
-        logger.info(f"Message data keys: {list(message_data.keys())}")
-        logger.info(f"Conversation keys: {list(conversation.keys())}")
-        logger.info(f"Message keys: {list(message.keys())}")
-
-        # ✅ LOG 4: Validación de tipo de mensaje
-        message_type = message.get("message_type")
+        # LOG: Datos extraídos
         logger.info(f"Message type: {message_type}")
+        logger.info(f"Content: {content}")
+        logger.info(f"Conversation ID: {conversation.get('id')}")
         
+        # Validar que es incoming
         if message_type != "incoming":
-            logger.warning(f"❌ Mensaje ignorado: tipo '{message_type}' (esperado: 'incoming')")
-            return JSONResponse({"status": "ignored", "reason": "outgoing_message"})
-
-        # Extraer datos necesarios
-        session_id = str(conversation.get("id", "unknown"))
-        user_message = message.get("content", "")
+            logger.warning(f"❌ Mensaje ignorado: tipo '{message_type}'")
+            return JSONResponse({"status": "ignored", "reason": "not_incoming"})
         
-        # ✅ LOG 5: Datos finales extraídos
+        if not content:
+            logger.warning("❌ Mensaje ignorado: sin contenido")
+            return JSONResponse({"status": "ignored", "reason": "no_content"})
+
+        # Extraer session_id (usar conversation_id o phone_number)
+        session_id = str(conversation.get("id", "unknown"))
+        phone_number = sender.get("phone_number", "")
+        
+        # Preferir usar el número de teléfono si está disponible
+        if phone_number:
+            session_id = phone_number
+        
         logger.info(f"✅ Mensaje válido para procesar:")
         logger.info(f"   Session ID: {session_id}")
-        logger.info(f"   User message: {user_message}")
-        logger.info(f"   Message length: {len(user_message)} chars")
+        logger.info(f"   User message: {content}")
+        logger.info(f"   Sender: {sender.get('name', 'Unknown')}")
 
-        logger.info(f"Mensaje directo de Chatwoot - Sesión: {session_id}")
-        logger.warning("Usando webhook directo de Chatwoot. Se recomienda usar n8n.")
-
-        # ✅ LOG 6: Antes de procesar con supervisor
+        # Procesar con el supervisor
         logger.info(f"🤖 Enviando mensaje al supervisor...")
-        response = await supervisor_agent.process_message(user_message, session_id)
+        response = await supervisor_agent.process_message(content, session_id)
         
-        # ✅ LOG 7: Respuesta del supervisor
-        logger.info(f"✅ Respuesta del supervisor recibida:")
-        logger.info(f"   Response length: {len(response)} chars")
+        logger.info(f"✅ Respuesta del supervisor recibida ({len(response)} chars)")
         logger.info(f"   First 150 chars: {response[:150]}...")
         logger.info("=" * 80)
 
