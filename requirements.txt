@@ -2,7 +2,6 @@
 fastapi==0.115.0
 uvicorn[standard]==0.32.0
 pydantic==2.9.0
-httpx==0.27.2
 
 # LangChain v1.0 ALPHA y dependencias compatibles
 langchain==1.0.0a1
@@ -16,10 +15,13 @@ langchain-google-genai==2.0.6
 # LangSmith - versión requerida por langchain-core 0.3.76
 langsmith==0.3.45
 
+# HTTP client - versión compatible
+httpx==0.27.2
+
 # Base de datos
 asyncpg==0.30.0
 sqlalchemy==2.0.35
-supabase==2.3.4
+supabase==2.9.1
 
 # Utilidades
 python-dotenv==1.0.1
