@@ -361,30 +361,14 @@ Te van a contactar en breve para resolver tu consulta.
         return "END"
 
     async def _authenticate_user(self, dni: str):
-        """Simula autenticación de usuario (mock para desarrollo)"""
-        # Mock users para desarrollo
-        mock_users = {
-            "44895177": {
-                "id": 1,
-                "nombre": "Maxi Santoro",
-                "legajo": "L001",
-                "tipo": "alumno",
-                "dni": "44895177"
-            },
-            "87654321": {
-                "id": 2,
-                "nombre": "María González",
-                "legajo": "L002",
-                "tipo": "alumno",
-                "dni": "87654321"
-            }
-        }
-
-        user_data = mock_users.get(dni)
-        if user_data:
-            from types import SimpleNamespace
-            return SimpleNamespace(**user_data)
-        return None
+        """Autentica usuario usando Supabase"""
+        try:
+            from app.database import user_repository
+            user = await user_repository.get_user_by_dni(dni)
+            return user
+        except Exception as e:
+            logger.error(f"Error autenticando usuario: {e}")
+            return None
 
     async def process_message(self, message: str, session_id: str) -> str:
         """
