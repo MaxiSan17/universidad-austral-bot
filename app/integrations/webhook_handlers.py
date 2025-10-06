@@ -107,6 +107,12 @@ async def n8n_webhook(
         raw_payload = await request.json()
         logger.debug(f"Payload recibido desde n8n: {json.dumps(raw_payload, indent=2)}")
 
+        # VALIDAR MESSAGE_TYPE - Ignorar mensajes outgoing
+        message_type = raw_payload.get("message_type", "").lstrip("=")
+        if message_type and message_type != "incoming":
+            logger.warning(f"❌ Mensaje ignorado desde n8n: tipo '{message_type}'")
+            return JSONResponse({"status": "ignored", "reason": "not_incoming"})
+
         # Normalizar payload (soporta formato completo y simplificado)
         normalized = _normalize_n8n_payload(raw_payload)
 
