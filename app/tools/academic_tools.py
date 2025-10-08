@@ -2,6 +2,8 @@ from typing import Dict, Any, Optional
 from app.tools.n8n_manager import N8NManager
 from app.utils.logger import get_logger
 
+N8N_BASE_URL = "https://n8n.tucbbs.com.ar/webhook"
+
 logger = get_logger(__name__)
 
 class AcademicTools:
@@ -14,7 +16,7 @@ class AcademicTools:
         """
         Consulta horarios del alumno
 
-        Webhook n8n: {N8N_BASE_URL}/consultar-horarios
+        Webhook n8n: {N8N_BASE_URL}/academic/consultar-horarios
 
         Parámetros esperados por n8n:
         - alumno_id: ID del alumno

@@ -128,7 +128,7 @@ class N8NManager:
         """
         webhooks = {
             # Académico
-            "academic/horarios": False,
+            "academic/consultar-horarios": False,
             "academic/inscripciones": False,
             "academic/profesores": False,
             "academic/aulas": False,
@@ -164,8 +164,8 @@ class N8NManager:
         En producción, las respuestas vendrán directamente de n8n.
         """
         mock_responses = {
-            "academic/horarios": {
-                "horarios": [
+            "academic/consultar-horarios": {
+                "consultar-horarios": [
                     {
                         "materia": "Nativa Digital",
                         "dia": "Lunes",
