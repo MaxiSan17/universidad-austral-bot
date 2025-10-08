@@ -6,6 +6,10 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+N8N_WEBHOOK_BASE_URL = "https://n8n.tucbbs.com.ar/webhook"
+N8N_API_KEY = "n8n-api-key"
+
+
 class N8NManager:
     """Gestor central para todas las comunicaciones con n8n"""
 
@@ -19,7 +23,7 @@ class N8NManager:
         Llama a un webhook de n8n de forma asíncrona
 
         Args:
-            webhook_path: Ruta del webhook (ej: "academic/horarios")
+            webhook_path: Ruta del webhook (ej: "/consultar-horarios")
             params: Parámetros a enviar al webhook
 
         Returns:

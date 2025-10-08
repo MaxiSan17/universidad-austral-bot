@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     N8N_WEBHOOK_BASE_URL: str = "https://n8n.tucbbs.com.ar/webhook"
     N8N_WEBHOOK_URL: str = "https://n8n.tucbbs.com.ar/webhook"
     N8N_API_KEY: Optional[str] = None
-    N8N_API_BASE_URL: str = "http://localhost:5678/api/v1"
+    N8N_API_BASE_URL: str = "https://n8n.tucbbs.com.ar/webhook"
 
     # Session Management
     SESSION_TTL_MINUTES: int = 60
