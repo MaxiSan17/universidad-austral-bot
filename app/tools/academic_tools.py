@@ -14,7 +14,7 @@ class AcademicTools:
         """
         Consulta horarios del alumno
 
-        Webhook n8n: {N8N_BASE_URL}/academic/horarios
+        Webhook n8n: {N8N_BASE_URL}/consultar-horarios
 
         Parámetros esperados por n8n:
         - alumno_id: ID del alumno
@@ -37,7 +37,7 @@ class AcademicTools:
         }
         """
         try:
-            webhook_path = "academic/horarios"
+            webhook_path = "consultar-horarios"
             return await self.n8n_manager.call_webhook(webhook_path, params)
         except Exception as e:
             logger.error(f"Error llamando webhook consultar_horarios: {e}")

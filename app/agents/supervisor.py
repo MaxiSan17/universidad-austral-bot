@@ -396,7 +396,7 @@ Te van a contactar en breve para resolver tu consulta.
             # Configuración del thread con límite de recursión (compatible con LangGraph v1.0)
             config = {
                 "configurable": {"thread_id": session_id},
-                "recursion_limit": 50  # Aumentar límite de recursión
+                "recursion_limit": 10  # Reducir límite de recursión
             }
 
             # Ejecutar el workflow
