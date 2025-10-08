@@ -2,8 +2,6 @@ from typing import Dict, Any, Optional
 from app.tools.n8n_manager import N8NManager
 from app.utils.logger import get_logger
 
-N8N_BASE_URL = "https://n8n.tucbbs.com.ar/webhook"
-
 logger = get_logger(__name__)
 
 class AcademicTools:
@@ -16,7 +14,7 @@ class AcademicTools:
         """
         Consulta horarios del alumno
 
-        Webhook n8n: {N8N_BASE_URL}/academic/consultar-horarios
+        Webhook n8n: {N8N_BASE_URL}/consultar-horarios
 
         Parámetros esperados por n8n:
         - alumno_id: ID del alumno
@@ -49,7 +47,7 @@ class AcademicTools:
         """
         Ver inscripciones del alumno
 
-        Webhook n8n: {N8N_BASE_URL}/academic/inscripciones
+        Webhook n8n: {N8N_BASE_URL}/inscripciones
 
         Parámetros esperados por n8n:
         - alumno_id: ID del alumno
@@ -67,7 +65,7 @@ class AcademicTools:
         }
         """
         try:
-            webhook_path = "academic/inscripciones"
+            webhook_path = "/inscripciones"
             return await self.n8n_manager.call_webhook(webhook_path, params)
         except Exception as e:
             logger.error(f"Error llamando webhook ver_inscripciones: {e}")
@@ -77,7 +75,7 @@ class AcademicTools:
         """
         Buscar información de profesor
 
-        Webhook n8n: {N8N_BASE_URL}/academic/profesores
+        Webhook n8n: {N8N_BASE_URL}/profesores
 
         Parámetros esperados por n8n:
         - materia: (opcional) Nombre de la materia
@@ -91,7 +89,7 @@ class AcademicTools:
         }
         """
         try:
-            webhook_path = "academic/profesores"
+            webhook_path = "/profesores"
             return await self.n8n_manager.call_webhook(webhook_path, params)
         except Exception as e:
             logger.error(f"Error llamando webhook buscar_profesor: {e}")
@@ -101,7 +99,7 @@ class AcademicTools:
         """
         Consultar ubicación de aula
 
-        Webhook n8n: {N8N_BASE_URL}/academic/aulas
+        Webhook n8n: {N8N_BASE_URL}/aulas
 
         Parámetros esperados por n8n:
         - materia: (opcional) Nombre de la materia
@@ -116,7 +114,7 @@ class AcademicTools:
         }
         """
         try:
-            webhook_path = "academic/aulas"
+            webhook_path = "/aulas"
             return await self.n8n_manager.call_webhook(webhook_path, params)
         except Exception as e:
             logger.error(f"Error llamando webhook consultar_aula: {e}")
@@ -126,7 +124,7 @@ class AcademicTools:
         """
         Consultar notas del alumno
 
-        Webhook n8n: {N8N_BASE_URL}/academic/notas
+        Webhook n8n: {N8N_BASE_URL}/notas
 
         Parámetros esperados por n8n:
         - alumno_id: ID del alumno
@@ -145,7 +143,7 @@ class AcademicTools:
         }
         """
         try:
-            webhook_path = "academic/notas"
+            webhook_path = "/notas"
             return await self.n8n_manager.call_webhook(webhook_path, params)
         except Exception as e:
             logger.error(f"Error llamando webhook consultar_notas: {e}")
