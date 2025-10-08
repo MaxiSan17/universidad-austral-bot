@@ -36,8 +36,8 @@ class Settings(BaseSettings):
     WHATSAPP_ACCESS_TOKEN: Optional[str] = None
 
     # n8n Integration
-    N8N_WEBHOOK_BASE_URL: str = "http://localhost:5678/webhook"
-    N8N_WEBHOOK_URL: str = "http://localhost:5678/webhook"
+    N8N_WEBHOOK_BASE_URL: str = "https://n8n.tucbbs.com.ar/webhook"
+    N8N_WEBHOOK_URL: str = "https://n8n.tucbbs.com.ar/webhook"
     N8N_API_KEY: Optional[str] = None
     N8N_API_BASE_URL: str = "http://localhost:5678/api/v1"
 
