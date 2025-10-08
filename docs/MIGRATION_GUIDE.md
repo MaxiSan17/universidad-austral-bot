@@ -77,7 +77,7 @@ LANGCHAIN_API_KEY=your_langsmith_key
 LANGCHAIN_PROJECT=universidad-austral-bot
 
 # n8n Webhooks
-N8N_WEBHOOK_BASE_URL=http://localhost:5678/webhook
+N8N_WEBHOOK_BASE_URL=https://n8n.tucbbs.com.ar/webhook
 N8N_API_KEY=your_n8n_api_key
 
 # Configuración mejorada
@@ -183,7 +183,7 @@ curl -X POST http://localhost:8000/webhook/test \
 
 ```bash
 # Test de webhook académico
-curl -X POST http://localhost:5678/webhook/academic/horarios \
+curl -X POST https://n8n.tucbbs.com.ar/webhook/consultas-horarios \
   -H "Content-Type: application/json" \
   -d '{"data": {"alumno_id": 1}}'
 ```

@@ -60,7 +60,7 @@ CHATWOOT_API_TOKEN=your_token
 CHATWOOT_ACCOUNT_ID=your_account_id
 
 # n8n
-N8N_WEBHOOK_URL=http://localhost:5678/webhook
+N8N_WEBHOOK_URL=https://n8n.tucbbs.com.ar/webhook
 N8N_API_KEY=your_n8n_key
 ```
 
@@ -81,7 +81,7 @@ make run
 - **Health Check**: http://localhost:8000/health
 - **PostgreSQL**: localhost:5432
 - **Redis**: localhost:6379
-- **n8n Interface**: http://localhost:5678 (admin/admin)
+- **n8n Interface**: https://n8n.tucbbs.com.ar/webhook (admin/admin)
 
 ## 🤖 Agentes Especializados
 

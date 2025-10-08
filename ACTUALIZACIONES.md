@@ -246,7 +246,7 @@ Agregar a `.env`:
 
 ```bash
 # n8n Integration (NUEVO)
-N8N_WEBHOOK_URL=http://localhost:5678/webhook
+N8N_WEBHOOK_URL=https://n8n.tucbbs.com.ar/webhook
 N8N_API_KEY=your-n8n-api-key
 N8N_WEBHOOK_SECRET=your-webhook-secret
 
@@ -408,7 +408,7 @@ pip install -r requirements.txt
 ```bash
 # Agregar a .env
 N8N_API_KEY=your-api-key
-N8N_WEBHOOK_URL=http://localhost:5678/webhook
+N8N_WEBHOOK_URL=https://n8n.tucbbs.com.ar/webhook
 ```
 
 #### Paso 3: Actualizar Imports en Agentes
