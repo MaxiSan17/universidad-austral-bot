@@ -74,22 +74,35 @@ class N8NManager:
                     headers=headers
                 )
 
+                # Log de respuesta raw para debug
+                logger.info(f"Status code de n8n: {response.status_code}")
+                logger.debug(f"Response headers: {response.headers}")
+                logger.debug(f"Response body (primeros 500 chars): {response.text[:500]}")
+
                 # Verificar status code
                 if response.status_code == 200:
-                    result = response.json()
-                    logger.info(f"Webhook {webhook_path} exitoso")
-                    return result
+                    try:
+                        result = response.json()
+                        logger.info(f"Webhook {webhook_path} exitoso")
+                        return result
+                    except Exception as parse_error:
+                        logger.error(f"Error parseando JSON de n8n: {parse_error}")
+                        logger.error(f"Response completo: {response.text}")
+                        return None
 
                 elif response.status_code == 404:
                     logger.warning(f"Webhook {webhook_path} no encontrado (404)")
+                    logger.warning(f"Response body: {response.text}")
                     return None
 
                 elif response.status_code >= 500:
                     logger.error(f"Error del servidor n8n: {response.status_code}")
+                    logger.error(f"Response body: {response.text}")
                     return None
 
                 else:
                     logger.warning(f"Respuesta inesperada del webhook: {response.status_code}")
+                    logger.warning(f"Response body: {response.text}")
                     return None
 
         except httpx.TimeoutException:

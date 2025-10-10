@@ -1,6 +1,11 @@
 """
-Módulo de base de datos
+Database package - Exporta todos los repositorios
 """
-from app.database.supabase_client import user_repository
+from app.database.supabase_client import SupabaseClient, user_repository
+from app.database.academic_repository import academic_repository
 
-__all__ = ["user_repository"]
+__all__ = [
+    'SupabaseClient',
+    'user_repository',
+    'academic_repository'
+]
