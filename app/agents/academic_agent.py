@@ -214,13 +214,32 @@ Puedo contarte sobre:
 
     def _format_schedule_response(self, horarios: List[Dict], nombre: str) -> str:
         """Formatea la respuesta de horarios"""
+        # Mapeo de días
+        dias_semana = {
+            1: 'Lunes',
+            2: 'Martes',
+            3: 'Miércoles',
+            4: 'Jueves',
+            5: 'Viernes',
+            6: 'Sábado',
+            7: 'Domingo'
+        }
+        
         response = f"¡Hola {nombre}! 📚 Te muestro tu horario para esta semana:\n\n"
 
         for horario in horarios:
-            response += f"📅 **{horario['dia']}**:\n"
-            response += f"• {horario['materia']} - {horario['hora_inicio']} a {horario['hora_fin']}\n"
-            response += f"• Aula {horario['aula']} ({horario['modalidad']})\n"
-            response += f"• Prof. {horario['profesor']}\n\n"
+            dia = dias_semana.get(horario.get('dia_semana'), 'Día desconocido')
+            materia = horario.get('materia_nombre', 'N/A')
+            hora_inicio = horario.get('hora_inicio', 'N/A')
+            hora_fin = horario.get('hora_fin', 'N/A')
+            aula = horario.get('aula', 'N/A')
+            modalidad = horario.get('modalidad', 'N/A')
+            profesor = horario.get('profesor_nombre', 'N/A')
+            
+            response += f"📅 **{dia}**:\n"
+            response += f"• {materia} - {hora_inicio} a {hora_fin}\n"
+            response += f"• Aula {aula} ({modalidad})\n"
+            response += f"• Prof. {profesor}\n\n"
 
         response += "¿Necesitás que te ayude con algo más? 😊"
         return response
