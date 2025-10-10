@@ -246,12 +246,25 @@ Puedo contarte sobre:
 
     def _format_enrollment_response(self, materias: List[Dict], nombre: str) -> str:
         """Formatea la respuesta de inscripciones"""
+        if not materias:
+            return f"¡Hola {nombre}! 😅 No encontré inscripciones registradas para vos en este momento."
+        
         response = f"¡Hola {nombre}! 📝 Estás inscripto en las siguientes materias:\n\n"
 
         for i, materia in enumerate(materias, 1):
-            response += f"{i}. **{materia['nombre']}** - {materia['comision']}\n"
+            nombre_materia = materia.get('nombre', 'Materia sin nombre')
+            codigo = materia.get('codigo', '')
+            comision = materia.get('comision', 'Sin comisión')
+            estado = materia.get('estado', 'cursando')
+            
+            # Formato más completo
+            response += f"{i}. 📚 **{nombre_materia}**"
+            if codigo and codigo != 'N/A':
+                response += f" ({codigo})"
+            response += f"\n   • Comisión: {comision}\n"
+            response += f"   • Estado: {estado}\n\n"
 
-        response += "\n¿Necesitás información específica sobre alguna materia? 😊"
+        response += "¿Necesitás información específica sobre alguna materia? 😊"
         return response
 
     def _get_error_response(self, user_info: Dict[str, Any]) -> str:
