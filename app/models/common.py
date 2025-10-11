@@ -1,7 +1,7 @@
 """
 Modelos Pydantic comunes compartidos entre todos los módulos
 """
-from pydantic import BaseModel, Field, validator, EmailStr
+from pydantic import BaseModel, Field, validator
 from typing import Optional, Literal
 from datetime import date, datetime
 from enum import Enum
@@ -126,7 +126,7 @@ class Profesor(UsuarioBase):
     """Modelo de profesor"""
     tipo: Literal[TipoUsuario.PROFESOR] = TipoUsuario.PROFESOR
     departamento: Optional[str] = None
-    email: Optional[EmailStr] = None
+    email: Optional[str] = None
 
 
 # =====================================================
