@@ -1,12 +1,24 @@
-from typing import Dict, Any, Optional
-from app.tools.calendar_tools import CalendarTools
-from app.utils.logger import get_logger
+"""
+Agente de calendario usando Pydantic Models para mejor tipado y formateo
+"""
+from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
+from app.tools.calendar_tools import CalendarTools
+from app.models import (
+    ExamenesResponse,
+    ExamenInfo,
+    CalendarioAcademicoResponse,
+    EventoCalendario,
+    TipoExamen
+)
+from app.core import DIAS_SEMANA_ES, MESES_ES, EMOJIS
+from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+
 class CalendarAgent:
-    """Agente de calendario modernizado"""
+    """Agente de calendario modernizado con soporte Pydantic"""
 
     def __init__(self):
         self.tools = CalendarTools()
@@ -23,44 +35,36 @@ class CalendarAgent:
                 return await self._handle_events(query, user_info)
             elif query_type == "feriados":
                 return await self._handle_holidays(user_info)
-            elif query_type == "inscripciones":
-                return await self._handle_enrollments(user_info)
             else:
                 return await self._handle_general_calendar(user_info)
 
         except Exception as e:
-            logger.error(f"Error en agente de calendario: {e}")
+            logger.error(f"Error en agente de calendario: {e}", exc_info=True)
             return self._get_error_response(user_info)
 
     def _normalize_text(self, text: str) -> str:
         """Normaliza texto quitando acentos y convirtiendo a minúsculas"""
         import unicodedata
-        # Normalizar unicode (NFD = descomponer caracteres con acentos)
         nfkd = unicodedata.normalize('NFD', text)
-        # Quitar marcas diacríticas (acentos)
         without_accents = ''.join([c for c in nfkd if not unicodedata.combining(c)])
         return without_accents.lower()
 
     def _classify_calendar_query(self, query: str) -> str:
         """Clasifica el tipo de consulta de calendario"""
-        # Normalizar query (quitar acentos)
         query_norm = self._normalize_text(query)
-        
-        # IMPORTANTE: Verificar exámenes PRIMERO antes de palabras genéricas
+
+        # Verificar exámenes PRIMERO
         if any(word in query_norm for word in ["examen", "examenes", "parcial", "final", "recuperatorio", "prueba"]):
             return "examenes"
         elif any(word in query_norm for word in ["feriado", "feriados", "no hay clases"]):
             return "feriados"
-        elif any(word in query_norm for word in ["inscripcion", "inscripciones", "cuando inscribir"]):
-            return "inscripciones"
-        # Palabras genéricas al final para no interferir con lo anterior
         elif any(word in query_norm for word in ["evento", "calendario", "fecha"]):
             return "eventos"
         else:
             return "general"
 
     async def _handle_exams(self, query: str, user_info: Dict[str, Any]) -> str:
-        """Maneja consultas sobre exámenes"""
+        """Maneja consultas sobre exámenes usando ExamenesResponse"""
         try:
             params = {"alumno_id": user_info["id"]}
 
@@ -76,19 +80,27 @@ class CalendarAgent:
             if fecha_hasta:
                 params["fecha_hasta"] = fecha_hasta
 
-            result = await self.tools.consultar_examenes(params)
+            # Detectar tipo de examen
+            tipo = self._extract_exam_type(query)
+            if tipo:
+                params["tipo_examen"] = tipo
 
-            if result and result.get("examenes"):
-                return self._format_exams_response(result, user_info["nombre"])
+            result_dict = await self.tools.consultar_examenes(params)
+
+            if result_dict and result_dict.get("examenes"):
+                # Convertir a modelo Pydantic
+                response = ExamenesResponse(**result_dict)
+                return self._format_exams_response(response, user_info["nombre"])
             else:
-                return f"¡Hola {user_info['nombre']}! 📝\n\n📅 No encontré exámenes{' de ' + materia if materia else ''} para las fechas solicitadas.\n\n¿Necesitás información sobre otra fecha o materia? 😊"
+                materia_text = f" de {materia}" if materia else ""
+                return f"{EMOJIS['examen']} ¡Hola {user_info['nombre']}!\n\n{EMOJIS['info']} No encontré exámenes{materia_text} para las fechas solicitadas.\n\n¿Necesitás información sobre otra fecha o materia? {EMOJIS['ayuda']}"
 
         except Exception as e:
-            logger.error(f"Error consultando exámenes: {e}")
+            logger.error(f"Error consultando exámenes: {e}", exc_info=True)
             return self._get_error_response(user_info)
 
     async def _handle_events(self, query: str, user_info: Dict[str, Any]) -> str:
-        """Maneja consultas sobre eventos del calendario académico"""
+        """Maneja consultas sobre eventos usando CalendarioAcademicoResponse"""
         try:
             params = {}
 
@@ -97,83 +109,75 @@ class CalendarAgent:
             if tipo_evento:
                 params["tipo_evento"] = tipo_evento
 
-            # Detectar rango de fechas
-            fecha_inicio, fecha_fin = self._extract_date_range(query)
-            if fecha_inicio:
-                params["fecha_inicio"] = fecha_inicio
-            if fecha_fin:
-                params["fecha_fin"] = fecha_fin
+            # Detectar mes específico
+            fecha_desde, fecha_hasta = self._extract_month_from_query(query)
+            if fecha_desde:
+                params["fecha_desde"] = fecha_desde
+            if fecha_hasta:
+                params["fecha_hasta"] = fecha_hasta
 
-            result = await self.tools.calendario_academico(params)
+            result_dict = await self.tools.calendario_academico(params)
 
-            if result:
-                return self._format_events_response(result, user_info["nombre"])
+            if result_dict and result_dict.get("eventos"):
+                # Convertir a modelo Pydantic
+                response = CalendarioAcademicoResponse(**result_dict)
+                return self._format_events_response(response, user_info["nombre"])
             else:
-                # Mock response para desarrollo
-                return self._get_mock_events_response(user_info["nombre"])
+                return f"{EMOJIS['calendario']} ¡Hola {user_info['nombre']}!\n\n{EMOJIS['info']} No encontré eventos para las fechas solicitadas.\n\n¿Querés ver el calendario completo? {EMOJIS['ayuda']}"
 
         except Exception as e:
-            logger.error(f"Error consultando eventos: {e}")
+            logger.error(f"Error consultando eventos: {e}", exc_info=True)
             return self._get_error_response(user_info)
 
     async def _handle_holidays(self, user_info: Dict[str, Any]) -> str:
         """Maneja consultas sobre feriados"""
         try:
-            current_year = datetime.now().year
-            params = {"año": current_year}
+            # Buscar eventos tipo feriado
+            params = {"tipo_evento": "feriado"}
 
-            result = await self.tools.consultar_feriados(params)
+            result_dict = await self.tools.calendario_academico(params)
 
-            if result:
-                return self._format_holidays_response(result, user_info["nombre"])
+            if result_dict and result_dict.get("eventos"):
+                response = CalendarioAcademicoResponse(**result_dict)
+                return self._format_holidays_response(response, user_info["nombre"])
             else:
-                # Mock response para desarrollo
-                return self._get_mock_holidays_response(user_info["nombre"])
+                return f"{EMOJIS['feriado']} ¡Hola {user_info['nombre']}!\n\n{EMOJIS['info']} No encontré información de feriados disponible.\n\n¿Te puedo ayudar con algo más? {EMOJIS['ayuda']}"
 
         except Exception as e:
-            logger.error(f"Error consultando feriados: {e}")
-            return self._get_error_response(user_info)
-
-    async def _handle_enrollments(self, user_info: Dict[str, Any]) -> str:
-        """Maneja consultas sobre fechas de inscripciones"""
-        try:
-            params = {}
-            result = await self.tools.inscripciones_fechas(params)
-
-            if result:
-                return self._format_enrollments_response(result, user_info["nombre"])
-            else:
-                # Mock response para desarrollo
-                return self._get_mock_enrollments_response(user_info["nombre"])
-
-        except Exception as e:
-            logger.error(f"Error consultando inscripciones: {e}")
+            logger.error(f"Error consultando feriados: {e}", exc_info=True)
             return self._get_error_response(user_info)
 
     async def _handle_general_calendar(self, user_info: Dict[str, Any]) -> str:
         """Maneja consultas generales sobre calendario"""
-        return f"""¡Hola {user_info['nombre']}! 📅
+        return f"""{EMOJIS['calendario']} ¡Hola {user_info['nombre']}!
 
 ¿En qué te puedo ayudar con fechas y calendario?
 
 Puedo ayudarte con:
-• 📝 **Fechas de exámenes** (parciales y finales)
-• 📋 **Calendario académico** y eventos importantes
-• 🏖️ **Feriados** y días sin clases
-• 📊 **Fechas de inscripciones** a materias y exámenes
+{EMOJIS['examen']} **Fechas de exámenes** (parciales y finales)
+{EMOJIS['calendario']} **Calendario académico** y eventos importantes
+{EMOJIS['feriado']} **Feriados** y días sin clases
+{EMOJIS['evento']} **Eventos institucionales**
 
-¿Qué necesitás saber? 😊"""
+¿Qué necesitás saber? {EMOJIS['ayuda']}"""
+
+    # =====================================================
+    # HELPERS
+    # =====================================================
 
     def _extract_subject_from_query(self, query: str) -> Optional[str]:
         """Extrae el nombre de la materia de la consulta"""
         query_norm = self._normalize_text(query)
 
-        if "nativa" in query_norm:
-            return "Nativa Digital"
-        elif "programacion" in query_norm:
-            return "Programación I"
-        elif "matematica" in query_norm:
-            return "Matemática Discreta"
+        materias = {
+            "nativa": "Nativa Digital",
+            "programacion": "Programación I",
+            "matematica": "Matemática Discreta",
+        }
+
+        for keyword, materia_nombre in materias.items():
+            if keyword in query_norm:
+                return materia_nombre
 
         return None
 
@@ -196,23 +200,15 @@ Puedo ayudarte con:
 
         if any(word in query_norm for word in ["inicio", "empiezan", "comienzan"]):
             return "inicio_clases"
-        elif any(word in query_norm for word in ["final", "finales"]):
-            return "finales"
         elif any(word in query_norm for word in ["inscripcion", "inscripciones"]):
             return "inscripciones"
 
         return None
 
-    def _extract_date_range(self, query: str) -> tuple:
-        """Extrae rango de fechas de la consulta"""
-        # Por simplicidad, retornamos None por ahora
-        # En una implementación completa, usaríamos NLP para extraer fechas
-        return None, None
-
     def _extract_month_from_query(self, query: str) -> tuple:
         """Extrae mes de la consulta y devuelve rango de fechas"""
         query_norm = self._normalize_text(query)
-        
+
         meses = {
             'enero': ('2025-01-01', '2025-01-31'),
             'febrero': ('2025-02-01', '2025-02-28'),
@@ -227,210 +223,166 @@ Puedo ayudarte con:
             'octubre': ('2025-10-01', '2025-10-31'),
             'noviembre': ('2025-11-01', '2025-11-30'),
             'diciembre': ('2025-12-01', '2025-12-31'),
-            # También año siguiente
-            'enero 2026': ('2026-01-01', '2026-01-31'),
-            'febrero 2026': ('2026-02-01', '2026-02-28'),
         }
-        
+
         for mes, (inicio, fin) in meses.items():
             if mes in query_norm:
                 return inicio, fin
-        
-        # Si dice "este mes"
-        if 'este mes' in query_norm:
-            from datetime import datetime
-            hoy = datetime.now()
-            inicio = hoy.replace(day=1).strftime('%Y-%m-%d')
-            # Último día del mes
-            if hoy.month == 12:
-                fin = hoy.replace(day=31).strftime('%Y-%m-%d')
-            else:
-                fin = (hoy.replace(day=1, month=hoy.month+1) - timedelta(days=1)).strftime('%Y-%m-%d')
-            return inicio, fin
-        
+
         return None, None
 
-    def _format_exams_response(self, data: Dict[str, Any], nombre: str) -> str:
-        """Formatea la respuesta de exámenes"""
-        if not data or not data.get("examenes"):
-            return f"¡Hola {nombre}! 📝\n\n📅 No tenés exámenes programados en los próximos días.\n\n¿Necesitás información sobre alguna fecha específica? 😊"
-        
-        response = f"¡Hola {nombre}! 📝\n\n"
-        response += f"📅 **Tus próximos exámenes:** ({data['total']} en total)\n\n"
-        
-        for examen in data["examenes"]:
-            # Emoji según tipo
-            tipo_emoji = {
-                'parcial': '📝',
-                'final': '🎯',
-                'recuperatorio': '🔄',
-                'trabajo_practico': '💻'
-            }.get(examen['tipo'], '📝')
-            
-            response += f"{tipo_emoji} **{examen['materia']}** - {examen['nombre']}\n"
-            response += f"   • 📆 Fecha: {examen['fecha']}\n"
-            response += f"   • ⏰ Horario: {examen['hora_inicio']} a {examen['hora_fin']}\n"
-            response += f"   • 📍 Aula: {examen['aula']} ({examen.get('edificio', 'Campus Principal')})\n"
-            response += f"   • 🔵 Modalidad: {examen['modalidad'].capitalize()}\n"
-            
-            if examen.get('observaciones'):
-                response += f"   • 📌 {examen['observaciones']}\n"
-            
-            response += "\n"
-        
-        response += "¿Necesitás información sobre algún examen específico? 😊"
-        return response
+    # =====================================================
+    # FORMATTERS CON PYDANTIC
+    # =====================================================
 
-    def _format_events_response(self, data: Dict[str, Any], nombre: str) -> str:
-        """Formatea la respuesta de eventos"""
-        response = f"¡Hola {nombre}! 📋\n\n"
+    def _format_exams_response(self, response: ExamenesResponse, nombre: str) -> str:
+        """Formatea la respuesta de exámenes usando ExamenesResponse"""
+        if not response.tiene_examenes:
+            return f"{EMOJIS['examen']} ¡Hola {nombre}!\n\n{EMOJIS['info']} No tenés exámenes programados en los próximos días.\n\n¿Necesitás información sobre alguna fecha específica? {EMOJIS['ayuda']}"
 
-        if data.get("eventos"):
-            response += "📅 **Eventos del calendario académico:**\n\n"
-            for evento in data["eventos"]:
-                response += f"📌 **{evento['nombre']}**\n"
-                response += f"• Fecha: {evento['fecha']}\n"
-                if evento.get("descripcion"):
-                    response += f"• {evento['descripcion']}\n"
-                response += "\n"
+        output = f"{EMOJIS['examen']} ¡Hola {nombre}!\n\n"
+        output += f"{EMOJIS['calendario']} **Tus próximos exámenes:** ({response.total} en total)\n\n"
 
-        if data.get("proximos_eventos"):
-            response += "🔜 **Próximos eventos importantes:**\n\n"
-            for evento in data["proximos_eventos"]:
-                response += f"⏰ **{evento['nombre']}** - {evento['fecha']}\n"
-                response += f"   (En {evento['dias_restantes']} días)\n\n"
+        # Resaltar exámenes próximos si hay
+        proximos = response.examenes_proximos
+        if proximos:
+            output += f"{EMOJIS['advertencia']} **¡Exámenes próximos! (7 días)**\n\n"
+            for examen in proximos:
+                output += self._format_single_exam(examen)
+                output += "\n"
 
-        response += "¿Necesitás información sobre algún evento específico? 😊"
-        return response
+        # Mostrar resto de exámenes
+        otros = [e for e in response.examenes if not e.es_proximo]
+        if otros:
+            output += f"{EMOJIS['calendario']} **Otros exámenes:**\n\n"
+            for examen in otros:
+                output += self._format_single_exam(examen)
+                output += "\n"
 
-    def _format_holidays_response(self, data: Dict[str, Any], nombre: str) -> str:
+        # Mostrar resumen por tipo usando property examenes_por_tipo
+        tipos_count = {tipo: len(exams) for tipo, exams in response.examenes_por_tipo.items()}
+        if len(tipos_count) > 1:
+            output += "\n📊 **Resumen:**\n"
+            for tipo, count in tipos_count.items():
+                tipo_name = tipo.value.capitalize()
+                output += f"• {count} {tipo_name}(es)\n"
+
+        output += f"\n¿Necesitás información sobre algún examen específico? {EMOJIS['ayuda']}"
+        return output
+
+    def _format_single_exam(self, examen: ExamenInfo) -> str:
+        """Formatea un solo examen usando ExamenInfo y sus properties"""
+        # Usar property emoji del modelo
+        output = f"{examen.emoji} **{examen.materia}** - {examen.nombre}\n"
+        output += f"   {EMOJIS['calendario']} Fecha: {examen.fecha.strftime('%d/%m/%Y')}\n"
+        output += f"   ⏰ Horario: {examen.hora_inicio} a {examen.hora_fin}\n"
+        output += f"   {EMOJIS['aula']} Aula: {examen.aula} ({examen.edificio})\n"
+        output += f"   🔵 Modalidad: {examen.modalidad.value.capitalize()}\n"
+
+        # Usar property dias_hasta_examen
+        if examen.dias_hasta_examen >= 0:
+            if examen.dias_hasta_examen == 0:
+                output += f"   {EMOJIS['advertencia']} **¡HOY!**\n"
+            elif examen.dias_hasta_examen == 1:
+                output += f"   {EMOJIS['advertencia']} **¡MAÑANA!**\n"
+            else:
+                output += f"   ⏳ En {examen.dias_hasta_examen} días\n"
+
+        if examen.observaciones:
+            output += f"   📌 {examen.observaciones}\n"
+
+        return output
+
+    def _format_events_response(self, response: CalendarioAcademicoResponse, nombre: str) -> str:
+        """Formatea la respuesta de eventos usando CalendarioAcademicoResponse"""
+        if not response.tiene_eventos:
+            return f"{EMOJIS['calendario']} ¡Hola {nombre}!\n\n{EMOJIS['info']} No encontré eventos en el calendario.\n\n¿Querés buscar por fechas específicas? {EMOJIS['ayuda']}"
+
+        output = f"{EMOJIS['calendario']} ¡Hola {nombre}!\n\n"
+
+        # Usar property eventos_proximos
+        proximos = response.eventos_proximos
+        if proximos:
+            output += f"{EMOJIS['advertencia']} **Próximos eventos importantes:**\n\n"
+            for evento in proximos:
+                output += self._format_single_event(evento)
+                output += "\n"
+
+        # Resto de eventos
+        otros = [e for e in response.eventos if not e.es_proximo]
+        if otros:
+            output += f"{EMOJIS['calendario']} **Calendario general:**\n\n"
+            for evento in otros:
+                output += self._format_single_event(evento)
+                output += "\n"
+
+        output += f"¿Necesitás información sobre algún evento específico? {EMOJIS['ayuda']}"
+        return output
+
+    def _format_single_event(self, evento: EventoCalendario) -> str:
+        """Formatea un solo evento usando EventoCalendario"""
+        output = f"{EMOJIS['evento']} **{evento.titulo}**\n"
+
+        if evento.fecha:
+            output += f"   {EMOJIS['calendario']} Fecha: {evento.fecha.strftime('%d/%m/%Y')}\n"
+
+            # Usar property dias_hasta_evento
+            dias = evento.dias_hasta_evento
+            if dias is not None:
+                if dias == 0:
+                    output += f"   {EMOJIS['advertencia']} **¡HOY!**\n"
+                elif dias == 1:
+                    output += f"   {EMOJIS['advertencia']} **¡MAÑANA!**\n"
+                elif dias > 0 and dias <= 14:
+                    output += f"   ⏳ En {dias} días\n"
+
+        if evento.descripcion:
+            # Truncar si es muy largo
+            desc = evento.descripcion[:100] + "..." if len(evento.descripcion) > 100 else evento.descripcion
+            output += f"   📝 {desc}\n"
+
+        return output
+
+    def _format_holidays_response(self, response: CalendarioAcademicoResponse, nombre: str) -> str:
         """Formatea la respuesta de feriados"""
-        response = f"¡Hola {nombre}! 🏖️\n\n"
+        if not response.tiene_eventos:
+            return f"{EMOJIS['feriado']} ¡Hola {nombre}!\n\n{EMOJIS['info']} No encontré información de feriados.\n\n¿Te puedo ayudar con algo más? {EMOJIS['ayuda']}"
 
-        if data.get("feriados"):
-            response += "📅 **Feriados y días sin clases:**\n\n"
-            for feriado in data["feriados"]:
-                emoji = "🏖️" if not feriado.get("hay_clases", True) else "📚"
-                response += f"{emoji} **{feriado['nombre']}** - {feriado['fecha']}\n"
-                if not feriado.get("hay_clases", True):
-                    response += "   (No hay clases)\n"
-                response += "\n"
+        output = f"{EMOJIS['feriado']} ¡Hola {nombre}!\n\n"
+        output += f"{EMOJIS['calendario']} **Feriados y días sin clases:**\n\n"
 
-        if data.get("proximo_feriado"):
-            prox = data["proximo_feriado"]
-            response += f"🔜 **Próximo feriado:** {prox['nombre']} ({prox['fecha']})\n"
-            response += f"   En {prox['dias_restantes']} días\n\n"
+        # Usar eventos_proximos para resaltar próximos feriados
+        proximos = response.eventos_proximos
+        if proximos:
+            output += f"{EMOJIS['advertencia']} **Próximos feriados:**\n\n"
+            for feriado in proximos:
+                output += f"{EMOJIS['feriado']} **{feriado.titulo}**\n"
+                if feriado.fecha:
+                    output += f"   📅 {feriado.fecha.strftime('%d/%m/%Y')}\n"
+                    dias = feriado.dias_hasta_evento
+                    if dias is not None and dias >= 0:
+                        output += f"   ⏳ En {dias} días\n"
+                output += "\n"
 
-        response += "¿Necesitás información sobre alguna fecha específica? 😊"
-        return response
+        # Resto de feriados
+        otros = [e for e in response.eventos if not e.es_proximo]
+        if otros:
+            output += f"{EMOJIS['calendario']} **Otros feriados:**\n\n"
+            for feriado in otros:
+                output += f"{EMOJIS['feriado']} **{feriado.titulo}**"
+                if feriado.fecha:
+                    output += f" - {feriado.fecha.strftime('%d/%m/%Y')}"
+                output += "\n"
 
-    def _format_enrollments_response(self, data: Dict[str, Any], nombre: str) -> str:
-        """Formatea la respuesta de inscripciones"""
-        response = f"¡Hola {nombre}! 📊\n\n"
-
-        if data.get("inscripciones"):
-            response += "📝 **Períodos de inscripción:**\n\n"
-            for inscripcion in data["inscripciones"]:
-                estado_emoji = "✅" if inscripcion["estado"] == "abierta" else "⏰"
-                response += f"{estado_emoji} **{inscripcion['tipo']}**\n"
-                response += f"• Período: {inscripcion['fecha_inicio']} al {inscripcion['fecha_fin']}\n"
-                response += f"• Estado: {inscripcion['estado'].title()}\n"
-                if inscripcion.get("url_inscripcion"):
-                    response += f"• Link: {inscripcion['url_inscripcion']}\n"
-                response += "\n"
-
-        if data.get("proximas_inscripciones"):
-            response += "🔜 **Próximas aperturas:**\n\n"
-            for inscripcion in data["proximas_inscripciones"]:
-                response += f"⏰ **{inscripcion['tipo']}**\n"
-                response += f"   Abre el {inscripcion['fecha_apertura']} (en {inscripcion['dias_restantes']} días)\n\n"
-
-        response += "¿Necesitás ayuda con alguna inscripción específica? 😊"
-        return response
-
-    def _get_mock_exams_response(self, materia: Optional[str], nombre: str) -> str:
-        """Respuesta mock para exámenes"""
-        if materia:
-            return f"""¡Hola {nombre}! 📝
-
-📅 **Exámenes de {materia}:**
-
-📚 **Parcial 1**
-• Fecha: 15 de Noviembre 2024 a las 14:00
-• Aula: R3
-• Duración: 2 horas
-
-¿Necesitás información sobre algún otro examen? 😊"""
-        else:
-            return f"""¡Hola {nombre}! 📝
-
-📅 **Tus próximos exámenes:**
-
-📚 **Nativa Digital - Parcial 1**
-• Fecha: 15 de Noviembre 2024 a las 14:00
-• Aula: R3
-
-📚 **Programación I - Parcial 2**
-• Fecha: 20 de Noviembre 2024 a las 16:00
-• Aula: A4
-
-¿Necesitás información específica sobre algún examen? 😊"""
-
-    def _get_mock_events_response(self, nombre: str) -> str:
-        """Respuesta mock para eventos"""
-        return f"""¡Hola {nombre}! 📋
-
-📅 **Próximos eventos del calendario académico:**
-
-📌 **Exámenes Finales**
-• Fecha: 2 de Diciembre 2024
-• Inicio del período de finales
-
-📌 **Fin de Clases**
-• Fecha: 25 de Noviembre 2024
-• Última semana de cursada
-
-¿Necesitás información sobre algún evento específico? 😊"""
-
-    def _get_mock_holidays_response(self, nombre: str) -> str:
-        """Respuesta mock para feriados"""
-        return f"""¡Hola {nombre}! 🏖️
-
-📅 **Próximos feriados:**
-
-🎄 **Navidad** - 25 de Diciembre 2024
-   (No hay clases)
-
-🎊 **Año Nuevo** - 1 de Enero 2025
-   (No hay clases)
-
-🔜 **Próximo feriado:** Navidad (en 35 días)
-
-¿Necesitás información sobre alguna fecha específica? 😊"""
-
-    def _get_mock_enrollments_response(self, nombre: str) -> str:
-        """Respuesta mock para inscripciones"""
-        return f"""¡Hola {nombre}! 📊
-
-📝 **Períodos de inscripción:**
-
-✅ **Inscripción a Exámenes Finales**
-• Período: 1 al 15 de Noviembre 2024
-• Estado: Abierta
-• Link: https://inscripciones.austral.edu.ar
-
-⏰ **Inscripción a Materias 2025**
-• Período: 15 al 30 de Noviembre 2024
-• Estado: Próximamente
-
-¿Necesitás ayuda con alguna inscripción específica? 😊"""
+        output += f"\n¿Necesitás información sobre alguna fecha específica? {EMOJIS['ayuda']}"
+        return output
 
     def _get_error_response(self, user_info: Dict[str, Any]) -> str:
         """Respuesta de error personalizada"""
-        return f"""¡Hola {user_info['nombre']}! 😅
+        return f"""{EMOJIS['error']} ¡Hola {user_info['nombre']}!
 
 Hubo un problemita técnico y no pude procesar tu consulta sobre fechas y calendario.
 
 Por favor intentá de nuevo en unos minutos, o si es urgente podés contactar directamente a la secretaría académica.
 
-¿Te puedo ayudar con algo más mientras tanto? 😊"""
+¿Te puedo ayudar con algo más mientras tanto? {EMOJIS['ayuda']}"""
