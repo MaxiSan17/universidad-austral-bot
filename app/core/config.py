@@ -29,23 +29,23 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 1000
     
     # API Keys
-    anthropic_api_key: str
+    anthropic_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
     google_api_key: Optional[str] = None
     
     # ==========================================
     # SUPABASE
     # ==========================================
-    supabase_url: str
-    supabase_key: str
+    supabase_url: Optional[str] = None
+    supabase_key: Optional[str] = None
     supabase_jwt_secret: Optional[str] = None
     
     # ==========================================
     # CHATWOOT
     # ==========================================
     chatwoot_url: str = "https://app.chatwoot.com"
-    chatwoot_api_token: str
-    chatwoot_account_id: str
+    chatwoot_api_token: Optional[str] = None
+    chatwoot_account_id: Optional[str] = None
     chatwoot_inbox_id: Optional[str] = None
     
     # ==========================================
