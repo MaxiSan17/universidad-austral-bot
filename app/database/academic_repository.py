@@ -139,7 +139,9 @@ class AcademicRepository:
             
             # Filtrar por estado si se especificó
             if request.estado:
-                query = query.eq('estado', request.estado.value)
+                # Manejar tanto string como enum
+                estado_value = request.estado.value if hasattr(request.estado, 'value') else request.estado
+                query = query.eq('estado', estado_value)
             
             inscripciones = query.execute()
             

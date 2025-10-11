@@ -74,7 +74,9 @@ class CalendarRepository:
             
             # Filtrar por tipo si se especificó
             if request.tipo_examen:
-                query = query.eq('tipo', request.tipo_examen.value)
+                # Manejar tanto string como enum
+                tipo_value = request.tipo_examen.value if hasattr(request.tipo_examen, 'value') else request.tipo_examen
+                query = query.eq('tipo', tipo_value)
             
             # Filtrar por fechas si se especificaron
             if request.fecha_desde:
