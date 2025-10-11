@@ -32,17 +32,29 @@ class CalendarAgent:
             logger.error(f"Error en agente de calendario: {e}")
             return self._get_error_response(user_info)
 
+    def _normalize_text(self, text: str) -> str:
+        """Normaliza texto quitando acentos y convirtiendo a minúsculas"""
+        import unicodedata
+        # Normalizar unicode (NFD = descomponer caracteres con acentos)
+        nfkd = unicodedata.normalize('NFD', text)
+        # Quitar marcas diacríticas (acentos)
+        without_accents = ''.join([c for c in nfkd if not unicodedata.combining(c)])
+        return without_accents.lower()
+
     def _classify_calendar_query(self, query: str) -> str:
         """Clasifica el tipo de consulta de calendario"""
+        # Normalizar query (quitar acentos)
+        query_norm = self._normalize_text(query)
+        
         # IMPORTANTE: Verificar exámenes PRIMERO antes de palabras genéricas
-        if any(word in query for word in ["examen", "parcial", "final", "recuperatorio", "prueba"]):
+        if any(word in query_norm for word in ["examen", "examenes", "parcial", "final", "recuperatorio", "prueba"]):
             return "examenes"
-        elif any(word in query for word in ["feriado", "feriados", "no hay clases"]):
+        elif any(word in query_norm for word in ["feriado", "feriados", "no hay clases"]):
             return "feriados"
-        elif any(word in query for word in ["inscripcion", "inscripciones", "cuando inscribir"]):
+        elif any(word in query_norm for word in ["inscripcion", "inscripciones", "cuando inscribir"]):
             return "inscripciones"
         # Palabras genéricas al final para no interferir con lo anterior
-        elif any(word in query for word in ["evento", "calendario", "fecha"]):
+        elif any(word in query_norm for word in ["evento", "calendario", "fecha"]):
             return "eventos"
         else:
             return "general"
@@ -154,39 +166,39 @@ Puedo ayudarte con:
 
     def _extract_subject_from_query(self, query: str) -> Optional[str]:
         """Extrae el nombre de la materia de la consulta"""
-        query_lower = query.lower()
+        query_norm = self._normalize_text(query)
 
-        if "nativa" in query_lower:
+        if "nativa" in query_norm:
             return "Nativa Digital"
-        elif "programación" in query_lower or "programacion" in query_lower:
+        elif "programacion" in query_norm:
             return "Programación I"
-        elif "matemática" in query_lower or "matematica" in query_lower:
+        elif "matematica" in query_norm:
             return "Matemática Discreta"
 
         return None
 
     def _extract_exam_type(self, query: str) -> Optional[str]:
         """Extrae el tipo de examen de la consulta"""
-        query_lower = query.lower()
+        query_norm = self._normalize_text(query)
 
-        if "final" in query_lower:
+        if "final" in query_norm:
             return "final"
-        elif "parcial" in query_lower:
+        elif "parcial" in query_norm:
             return "parcial"
-        elif "recuperatorio" in query_lower:
+        elif "recuperatorio" in query_norm:
             return "recuperatorio"
 
         return None
 
     def _extract_event_type(self, query: str) -> Optional[str]:
         """Extrae el tipo de evento de la consulta"""
-        query_lower = query.lower()
+        query_norm = self._normalize_text(query)
 
-        if any(word in query_lower for word in ["inicio", "empiezan", "comienzan"]):
+        if any(word in query_norm for word in ["inicio", "empiezan", "comienzan"]):
             return "inicio_clases"
-        elif any(word in query_lower for word in ["final", "finales"]):
+        elif any(word in query_norm for word in ["final", "finales"]):
             return "finales"
-        elif any(word in query_lower for word in ["inscripcion", "inscripciones"]):
+        elif any(word in query_norm for word in ["inscripcion", "inscripciones"]):
             return "inscripciones"
 
         return None
@@ -199,7 +211,7 @@ Puedo ayudarte con:
 
     def _extract_month_from_query(self, query: str) -> tuple:
         """Extrae mes de la consulta y devuelve rango de fechas"""
-        query_lower = query.lower()
+        query_norm = self._normalize_text(query)
         
         meses = {
             'enero': ('2025-01-01', '2025-01-31'),
@@ -221,11 +233,11 @@ Puedo ayudarte con:
         }
         
         for mes, (inicio, fin) in meses.items():
-            if mes in query_lower:
+            if mes in query_norm:
                 return inicio, fin
         
         # Si dice "este mes"
-        if 'este mes' in query_lower:
+        if 'este mes' in query_norm:
             from datetime import datetime
             hoy = datetime.now()
             inicio = hoy.replace(day=1).strftime('%Y-%m-%d')
