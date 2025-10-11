@@ -30,31 +30,107 @@ from app.models.common import (
     validate_horario,
 )
 
-__all__ = [
+# Academic models
+from app.models.academic import (
+    # Requests
+    HorariosRequest,
+    InscripcionesRequest,
+    ProfesorRequest,
+    AulaRequest,
+    CreditosVURequest,
+    
+    # Responses
+    HorarioInfo,
+    HorariosResponse,
+    InscripcionInfo,
+    InscripcionesResponse,
+    ProfesorInfo,
+    ProfesorResponse,
+    AulaInfo,
+    AulaResponse,
+    CreditosVUInfo,
+    CreditosVUResponse,
+)
+
+# Calendar models
+from app.models.calendar import (
     # Enums
+    TipoExamen,
+    TipoEvento,
+    
+    # Requests
+    ExamenesRequest,
+    CalendarioAcademicoRequest,
+    ProximosExamenesRequest,
+    
+    # Responses
+    ExamenInfo,
+    ExamenesResponse,
+    EventoCalendario,
+    CalendarioAcademicoResponse,
+    ResumenExamenes,
+)
+
+__all__ = [
+    # Common - Enums
     'TipoUsuario',
     'EstadoInscripcion',
     'Modalidad',
     'DiaSemana',
     
-    # Base
+    # Common - Base
     'BaseModelConfig',
     'UUIDMixin',
     
-    # Usuario
+    # Common - Usuario
     'UsuarioBase',
     'Alumno',
     'Profesor',
     
-    # Academic
+    # Common - Academic
     'MateriaBase',
     'ComisionBase',
     
-    # Response
+    # Common - Response
     'PaginatedResponse',
     'ErrorResponse',
     
-    # Validators
+    # Common - Validators
     'validate_fecha_range',
     'validate_horario',
+    
+    # Academic - Requests
+    'HorariosRequest',
+    'InscripcionesRequest',
+    'ProfesorRequest',
+    'AulaRequest',
+    'CreditosVURequest',
+    
+    # Academic - Responses
+    'HorarioInfo',
+    'HorariosResponse',
+    'InscripcionInfo',
+    'InscripcionesResponse',
+    'ProfesorInfo',
+    'ProfesorResponse',
+    'AulaInfo',
+    'AulaResponse',
+    'CreditosVUInfo',
+    'CreditosVUResponse',
+    
+    # Calendar - Enums
+    'TipoExamen',
+    'TipoEvento',
+    
+    # Calendar - Requests
+    'ExamenesRequest',
+    'CalendarioAcademicoRequest',
+    'ProximosExamenesRequest',
+    
+    # Calendar - Responses
+    'ExamenInfo',
+    'ExamenesResponse',
+    'EventoCalendario',
+    'CalendarioAcademicoResponse',
+    'ResumenExamenes',
 ]
