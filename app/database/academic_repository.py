@@ -90,13 +90,17 @@ class AcademicRepository:
             horarios = []
             for h in horarios_raw:
                 try:
+                    # Formatear horarios a HH:MM (eliminar segundos si vienen)
+                    hora_inicio = str(h.get('hora_inicio', '00:00'))[:5]
+                    hora_fin = str(h.get('hora_fin', '00:00'))[:5]
+                    
                     horario = HorarioInfo(
                         dia_semana=h.get('dia_semana', 1),
                         materia_nombre=h.get('materia_nombre', 'N/A'),
                         materia_codigo=h.get('materia_codigo', 'N/A'),
                         comision=h.get('comision', 'N/A'),
-                        hora_inicio=h.get('hora_inicio', '00:00'),
-                        hora_fin=h.get('hora_fin', '00:00'),
+                        hora_inicio=hora_inicio,
+                        hora_fin=hora_fin,
                         aula=h.get('aula', 'N/A'),
                         edificio=h.get('edificio', 'Campus Principal'),
                         modalidad=Modalidad(h.get('modalidad', 'presencial')),

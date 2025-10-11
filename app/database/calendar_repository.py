@@ -134,6 +134,10 @@ class CalendarRepository:
                     if isinstance(fecha_examen, str):
                         fecha_examen = datetime.strptime(fecha_examen, '%Y-%m-%d').date()
                     
+                    # Formatear horarios a HH:MM (eliminar segundos si vienen)
+                    hora_inicio = str(examen['hora_inicio'])[:5] if examen.get('hora_inicio') else '00:00'
+                    hora_fin = str(examen['hora_fin'])[:5] if examen.get('hora_fin') else '00:00'
+                    
                     # Crear modelo Pydantic
                     examen_info = ExamenInfo(
                         materia=materia_nombre_db,
@@ -143,8 +147,8 @@ class CalendarRepository:
                         numero=examen.get('numero'),
                         nombre=nombre_examen,
                         fecha=fecha_examen,
-                        hora_inicio=str(examen['hora_inicio']),
-                        hora_fin=str(examen['hora_fin']),
+                        hora_inicio=hora_inicio,
+                        hora_fin=hora_fin,
                         aula=examen.get('aula', 'A confirmar'),
                         edificio=examen.get('edificio', 'Campus Principal'),
                         modalidad=Modalidad(examen.get('modalidad', 'presencial')),
