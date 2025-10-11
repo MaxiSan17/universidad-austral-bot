@@ -85,6 +85,7 @@ class CalendarRepository:
                 return {"examenes": [], "total": 0}
             
             comision_ids = [insc['comision_id'] for insc in inscripciones.data]
+            logger.info(f"Alumno tiene {len(comision_ids)} comisiones")
             
             # Obtener exámenes de esas comisiones
             query = self.client.table('examenes') \
@@ -104,21 +105,35 @@ class CalendarRepository:
                 logger.info(f"No se encontraron exámenes para alumno {alumno_id}")
                 return {"examenes": [], "total": 0}
             
-            # Enriquecer con datos de materia
+            logger.info(f"Se encontraron {len(examenes_response.data)} exámenes")
+            
+            # Enriquecer con datos de materia (queries separadas)
             examenes = []
             for examen in examenes_response.data:
                 try:
-                    # Obtener comisión y materia
-                    comision = self.client.table('comisiones') \
-                        .select('codigo_comision, materias!inner(nombre, codigo)') \
+                    # Obtener comisión
+                    comision_response = self.client.table('comisiones') \
+                        .select('codigo_comision, materia_id') \
                         .eq('id', examen['comision_id']) \
-                        .single() \
                         .execute()
                     
-                    if not comision.data:
+                    if not comision_response.data or len(comision_response.data) == 0:
+                        logger.warning(f"No se encontró comisión {examen['comision_id']}")
                         continue
                     
-                    materia = comision.data.get('materias', {})
+                    comision = comision_response.data[0]
+                    
+                    # Obtener materia
+                    materia_response = self.client.table('materias') \
+                        .select('nombre, codigo') \
+                        .eq('id', comision['materia_id']) \
+                        .execute()
+                    
+                    if not materia_response.data or len(materia_response.data) == 0:
+                        logger.warning(f"No se encontró materia {comision['materia_id']}")
+                        continue
+                    
+                    materia = materia_response.data[0]
                     materia_nombre_db = materia.get('nombre', 'N/A')
                     
                     # Filtrar por materia si se especificó
@@ -134,7 +149,7 @@ class CalendarRepository:
                     examenes.append({
                         "materia": materia_nombre_db,
                         "materia_codigo": materia.get('codigo', 'N/A'),
-                        "comision": comision.data.get('codigo_comision', 'N/A'),
+                        "comision": comision.get('codigo_comision', 'N/A'),
                         "tipo": examen['tipo'],
                         "numero": examen.get('numero'),
                         "nombre": nombre_examen,
@@ -151,7 +166,7 @@ class CalendarRepository:
                     logger.error(f"Error procesando examen {examen.get('id')}: {e}")
                     continue
             
-            logger.info(f"Se encontraron {len(examenes)} exámenes")
+            logger.info(f"Se formatearon {len(examenes)} exámenes exitosamente")
             
             return {
                 "examenes": examenes,

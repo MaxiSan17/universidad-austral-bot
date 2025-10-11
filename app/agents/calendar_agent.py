@@ -34,14 +34,16 @@ class CalendarAgent:
 
     def _classify_calendar_query(self, query: str) -> str:
         """Clasifica el tipo de consulta de calendario"""
-        if any(word in query for word in ["examen", "parcial", "final", "recuperatorio"]):
+        # IMPORTANTE: Verificar exámenes PRIMERO antes de palabras genéricas
+        if any(word in query for word in ["examen", "parcial", "final", "recuperatorio", "prueba"]):
             return "examenes"
-        elif any(word in query for word in ["evento", "calendario", "fecha", "cuando"]):
-            return "eventos"
         elif any(word in query for word in ["feriado", "feriados", "no hay clases"]):
             return "feriados"
         elif any(word in query for word in ["inscripcion", "inscripciones", "cuando inscribir"]):
             return "inscripciones"
+        # Palabras genéricas al final para no interferir con lo anterior
+        elif any(word in query for word in ["evento", "calendario", "fecha"]):
+            return "eventos"
         else:
             return "general"
 
@@ -53,20 +55,21 @@ class CalendarAgent:
             # Detectar materia específica
             materia = self._extract_subject_from_query(query)
             if materia:
-                params["materia"] = materia
+                params["materia_nombre"] = materia
 
-            # Detectar tipo de examen
-            tipo_examen = self._extract_exam_type(query)
-            if tipo_examen:
-                params["tipo_examen"] = tipo_examen
+            # Detectar mes específico
+            fecha_desde, fecha_hasta = self._extract_month_from_query(query)
+            if fecha_desde:
+                params["fecha_desde"] = fecha_desde
+            if fecha_hasta:
+                params["fecha_hasta"] = fecha_hasta
 
             result = await self.tools.consultar_examenes(params)
 
-            if result:
+            if result and result.get("examenes"):
                 return self._format_exams_response(result, user_info["nombre"])
             else:
-                # Mock response para desarrollo
-                return self._get_mock_exams_response(materia, user_info["nombre"])
+                return f"¡Hola {user_info['nombre']}! 📝\n\n📅 No encontré exámenes{' de ' + materia if materia else ''} para las fechas solicitadas.\n\n¿Necesitás información sobre otra fecha o materia? 😊"
 
         except Exception as e:
             logger.error(f"Error consultando exámenes: {e}")
@@ -194,21 +197,75 @@ Puedo ayudarte con:
         # En una implementación completa, usaríamos NLP para extraer fechas
         return None, None
 
+    def _extract_month_from_query(self, query: str) -> tuple:
+        """Extrae mes de la consulta y devuelve rango de fechas"""
+        query_lower = query.lower()
+        
+        meses = {
+            'enero': ('2025-01-01', '2025-01-31'),
+            'febrero': ('2025-02-01', '2025-02-28'),
+            'marzo': ('2025-03-01', '2025-03-31'),
+            'abril': ('2025-04-01', '2025-04-30'),
+            'mayo': ('2025-05-01', '2025-05-31'),
+            'junio': ('2025-06-01', '2025-06-30'),
+            'julio': ('2025-07-01', '2025-07-31'),
+            'agosto': ('2025-08-01', '2025-08-31'),
+            'septiembre': ('2025-09-01', '2025-09-30'),
+            'setiembre': ('2025-09-01', '2025-09-30'),
+            'octubre': ('2025-10-01', '2025-10-31'),
+            'noviembre': ('2025-11-01', '2025-11-30'),
+            'diciembre': ('2025-12-01', '2025-12-31'),
+            # También año siguiente
+            'enero 2026': ('2026-01-01', '2026-01-31'),
+            'febrero 2026': ('2026-02-01', '2026-02-28'),
+        }
+        
+        for mes, (inicio, fin) in meses.items():
+            if mes in query_lower:
+                return inicio, fin
+        
+        # Si dice "este mes"
+        if 'este mes' in query_lower:
+            from datetime import datetime
+            hoy = datetime.now()
+            inicio = hoy.replace(day=1).strftime('%Y-%m-%d')
+            # Último día del mes
+            if hoy.month == 12:
+                fin = hoy.replace(day=31).strftime('%Y-%m-%d')
+            else:
+                fin = (hoy.replace(day=1, month=hoy.month+1) - timedelta(days=1)).strftime('%Y-%m-%d')
+            return inicio, fin
+        
+        return None, None
+
     def _format_exams_response(self, data: Dict[str, Any], nombre: str) -> str:
         """Formatea la respuesta de exámenes"""
+        if not data or not data.get("examenes"):
+            return f"¡Hola {nombre}! 📝\n\n📅 No tenés exámenes programados en los próximos días.\n\n¿Necesitás información sobre alguna fecha específica? 😊"
+        
         response = f"¡Hola {nombre}! 📝\n\n"
-
-        if data.get("examenes"):
-            response += "📅 **Tus próximos exámenes:**\n\n"
-            for examen in data["examenes"]:
-                response += f"📚 **{examen['materia']}**\n"
-                response += f"• Tipo: {examen['tipo']}\n"
-                response += f"• Fecha: {examen['fecha']} a las {examen['hora']}\n"
-                response += f"• Aula: {examen['aula']}\n"
-                response += f"• Duración: {examen.get('duracion', 'No especificada')}\n\n"
-        else:
-            response += "📅 No tenés exámenes programados en los próximos días.\n\n"
-
+        response += f"📅 **Tus próximos exámenes:** ({data['total']} en total)\n\n"
+        
+        for examen in data["examenes"]:
+            # Emoji según tipo
+            tipo_emoji = {
+                'parcial': '📝',
+                'final': '🎯',
+                'recuperatorio': '🔄',
+                'trabajo_practico': '💻'
+            }.get(examen['tipo'], '📝')
+            
+            response += f"{tipo_emoji} **{examen['materia']}** - {examen['nombre']}\n"
+            response += f"   • 📆 Fecha: {examen['fecha']}\n"
+            response += f"   • ⏰ Horario: {examen['hora_inicio']} a {examen['hora_fin']}\n"
+            response += f"   • 📍 Aula: {examen['aula']} ({examen.get('edificio', 'Campus Principal')})\n"
+            response += f"   • 🔵 Modalidad: {examen['modalidad'].capitalize()}\n"
+            
+            if examen.get('observaciones'):
+                response += f"   • 📌 {examen['observaciones']}\n"
+            
+            response += "\n"
+        
         response += "¿Necesitás información sobre algún examen específico? 😊"
         return response
 
