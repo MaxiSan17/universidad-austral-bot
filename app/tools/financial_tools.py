@@ -41,37 +41,6 @@ class FinancialTools:
             logger.error(f"Error llamando webhook estado_cuenta: {e}")
             return None
 
-    async def consultar_creditos_vu(self, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """
-        Consulta créditos de Vida Universitaria
-
-        Webhook n8n: {N8N_BASE_URL}/financial/creditos-vu
-
-        Parámetros esperados por n8n:
-        - alumno_id: ID del alumno
-
-        Respuesta esperada de n8n:
-        {
-            "creditos_actuales": 8,
-            "creditos_necesarios": 10,
-            "actividades": [
-                {
-                    "nombre": "Taller de Teatro",
-                    "creditos": 3,
-                    "estado": "Completado",
-                    "fecha": "2024-09-15"
-                }
-            ],
-            "faltantes": 2
-        }
-        """
-        try:
-            webhook_path = "financial/creditos-vu"
-            return await self.n8n_manager.call_webhook(webhook_path, params)
-        except Exception as e:
-            logger.error(f"Error llamando webhook consultar_creditos_vu: {e}")
-            return None
-
     async def historial_pagos(self, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Consulta historial de pagos

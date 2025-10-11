@@ -2,6 +2,7 @@
 fastapi==0.115.0
 uvicorn[standard]==0.32.0
 pydantic==2.9.0
+pydantic-settings==2.6.1
 
 # LangChain v1.0 ALPHA y dependencias compatibles
 langchain==1.0.0a1
