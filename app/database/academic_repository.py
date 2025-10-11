@@ -132,86 +132,61 @@ class AcademicRepository:
             
             logger.info(f"Consultando inscripciones para alumno {alumno_id}")
             
-            # Usar SQL directo para evitar problemas con nested selects
-            query = f"""
-            SELECT 
-                i.id,
-                i.estado,
-                i.asistencia_porcentaje,
-                i.nota_cursada,
-                c.codigo_comision,
-                c.cuatrimestre as comision_cuatrimestre,
-                m.nombre as materia_nombre,
-                m.codigo as materia_codigo,
-                m.carrera
-            FROM inscripciones i
-            LEFT JOIN comisiones c ON i.comision_id = c.id
-            LEFT JOIN materias m ON c.materia_id = m.id
-            WHERE i.alumno_id = '{alumno_id}'
-            """
+            # Obtener inscripciones
+            inscripciones = self.client.table('inscripciones') \
+                .select('id, estado, comision_id, asistencia_porcentaje, nota_cursada') \
+                .eq('alumno_id', alumno_id) \
+                .execute()
             
-            response = self.client.rpc('exec_sql', {'query': query}).execute()
+            if not inscripciones.data:
+                logger.info(f"No se encontraron inscripciones para alumno {alumno_id}")
+                return {"materias": [], "total": 0}
             
-            # Si rpc no funciona, usar approach alternativo
-            if not response.data:
-                # Fallback: obtener inscripciones y hacer los joins manualmente
-                inscripciones = self.client.table('inscripciones') \
-                    .select('id, estado, comision_id, asistencia_porcentaje, nota_cursada') \
-                    .eq('alumno_id', alumno_id) \
-                    .execute()
-                
-                if not inscripciones.data:
-                    logger.info(f"No se encontraron inscripciones para alumno {alumno_id}")
-                    return {"materias": [], "total": 0}
-                
-                materias = []
-                for insc in inscripciones.data:
+            logger.info(f"Encontradas {len(inscripciones.data)} inscripciones")
+            
+            materias = []
+            for insc in inscripciones.data:
+                try:
                     # Obtener comisión
-                    comision = self.client.table('comisiones') \
+                    comision_response = self.client.table('comisiones') \
                         .select('id, codigo_comision, materia_id, cuatrimestre') \
                         .eq('id', insc['comision_id']) \
-                        .single() \
                         .execute()
                     
-                    if comision.data:
-                        # Obtener materia
-                        materia = self.client.table('materias') \
-                            .select('nombre, codigo, carrera') \
-                            .eq('id', comision.data['materia_id']) \
-                            .single() \
-                            .execute()
-                        
-                        if materia.data:
-                            materias.append({
-                                "nombre": materia.data.get('nombre', 'N/A'),
-                                "codigo": materia.data.get('codigo', 'N/A'),
-                                "comision": comision.data.get('codigo_comision', 'N/A'),
-                                "carrera": materia.data.get('carrera', 'N/A'),
-                                "cuatrimestre": comision.data.get('cuatrimestre', 0),
-                                "estado": insc.get('estado', 'cursando'),
-                                "asistencia": insc.get('asistencia_porcentaje', 0),
-                                "nota_cursada": insc.get('nota_cursada')
-                            })
-                
-                logger.info(f"Se encontraron {len(materias)} inscripciones")
-                return {"materias": materias, "total": len(materias)}
+                    if not comision_response.data or len(comision_response.data) == 0:
+                        logger.warning(f"No se encontró comisión {insc['comision_id']}")
+                        continue
+                    
+                    comision = comision_response.data[0]
+                    
+                    # Obtener materia
+                    materia_response = self.client.table('materias') \
+                        .select('nombre, codigo, carrera') \
+                        .eq('id', comision['materia_id']) \
+                        .execute()
+                    
+                    if not materia_response.data or len(materia_response.data) == 0:
+                        logger.warning(f"No se encontró materia {comision['materia_id']}")
+                        continue
+                    
+                    materia = materia_response.data[0]
+                    
+                    materias.append({
+                        "nombre": materia.get('nombre', 'N/A'),
+                        "codigo": materia.get('codigo', 'N/A'),
+                        "comision": comision.get('codigo_comision', 'N/A'),
+                        "carrera": materia.get('carrera', 'N/A'),
+                        "cuatrimestre": comision.get('cuatrimestre', 0),
+                        "estado": insc.get('estado', 'cursando'),
+                        "asistencia": insc.get('asistencia_porcentaje', 0),
+                        "nota_cursada": insc.get('nota_cursada')
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Error procesando inscripción {insc.get('id')}: {e}")
+                    continue
             
-            # Si SQL directo funcionó
-            materias = [
-                {
-                    "nombre": row.get('materia_nombre', 'N/A'),
-                    "codigo": row.get('materia_codigo', 'N/A'),
-                    "comision": row.get('codigo_comision', 'N/A'),
-                    "carrera": row.get('carrera', 'N/A'),
-                    "cuatrimestre": row.get('comision_cuatrimestre', 0),
-                    "estado": row.get('estado', 'cursando'),
-                    "asistencia": row.get('asistencia_porcentaje', 0),
-                    "nota_cursada": row.get('nota_cursada')
-                }
-                for row in response.data
-            ]
-            
-            logger.info(f"Se encontraron {len(materias)} inscripciones")
+            logger.info(f"Se encontraron {len(materias)} materias válidas")
             return {"materias": materias, "total": len(materias)}
             
         except ValueError as e:
