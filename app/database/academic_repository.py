@@ -429,6 +429,74 @@ class AcademicRepository:
                 "error": str(e)
             }
 
+    # =====================================================
+    # TOOL 5: GET CRÉDITOS VU
+    # =====================================================
+
+    async def get_creditos_vu(self, alumno_id: str) -> Dict[str, Any]:
+        """
+        Obtiene los créditos de Vida Universitaria del alumno
+        
+        Args:
+            alumno_id: UUID del alumno
+            
+        Returns:
+            Dict con información de créditos VU
+        """
+        try:
+            # Validación
+            self._validate_alumno_id(alumno_id)
+            
+            logger.info(f"Consultando créditos VU para alumno {alumno_id}")
+            
+            # Consultar estado académico
+            response = self.client.table('estado_academico') \
+                .select('creditos_vu_totales, creditos_vu_requeridos') \
+                .eq('alumno_id', alumno_id) \
+                .execute()
+            
+            if not response.data or len(response.data) == 0:
+                logger.info(f"No se encontró estado académico para alumno {alumno_id}")
+                # Valores por defecto si no existe registro
+                return {
+                    "creditos_actuales": 0,
+                    "creditos_necesarios": 10,
+                    "creditos_faltantes": 10,
+                    "porcentaje_completado": 0,
+                    "cumple_requisito": False
+                }
+            
+            estado = response.data[0]
+            creditos_actuales = estado.get('creditos_vu_totales', 0) or 0
+            creditos_necesarios = estado.get('creditos_vu_requeridos', 10) or 10
+            creditos_faltantes = max(0, creditos_necesarios - creditos_actuales)
+            porcentaje = min(100, int((creditos_actuales / creditos_necesarios) * 100)) if creditos_necesarios > 0 else 0
+            cumple = creditos_actuales >= creditos_necesarios
+            
+            logger.info(f"Créditos VU: {creditos_actuales}/{creditos_necesarios}")
+            
+            return {
+                "creditos_actuales": creditos_actuales,
+                "creditos_necesarios": creditos_necesarios,
+                "creditos_faltantes": creditos_faltantes,
+                "porcentaje_completado": porcentaje,
+                "cumple_requisito": cumple
+            }
+            
+        except ValueError as e:
+            logger.error(f"Error de validación en get_creditos_vu: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Error obteniendo créditos VU: {e}", exc_info=True)
+            return {
+                "creditos_actuales": 0,
+                "creditos_necesarios": 10,
+                "creditos_faltantes": 10,
+                "porcentaje_completado": 0,
+                "cumple_requisito": False,
+                "error": str(e)
+            }
+
 
 # Instancia global del repositorio
 academic_repository = AcademicRepository()

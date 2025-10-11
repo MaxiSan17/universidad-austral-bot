@@ -165,16 +165,28 @@ class AcademicTools:
             logger.error(f"Error en consultar_aula: {e}")
             return None
 
-    async def consultar_notas(self, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def consultar_creditos_vu(self, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
-        Consultar notas del alumno
+        Consultar créditos de Vida Universitaria
         
-        NOTA: Esta tool aún no está implementada en el repository.
-        Devuelve un placeholder por ahora.
-        """
-        logger.warning("consultar_notas aún no implementado")
-        return {
-            "notas": [],
-            "total": 0,
-            "message": "Función en desarrollo"
+        Parámetros esperados:
+        - alumno_id: ID del alumno
+
+        Respuesta:
+        {
+            "creditos_actuales": 8,
+            "creditos_necesarios": 10,
+            "creditos_faltantes": 2,
+            "porcentaje_completado": 80,
+            "cumple_requisito": False
         }
+        """
+        try:
+            alumno_id = params.get('alumno_id')
+            
+            logger.info(f"Consultando créditos VU: alumno_id={alumno_id}")
+            
+            return await self.repository.get_creditos_vu(alumno_id=alumno_id)
+        except Exception as e:
+            logger.error(f"Error en consultar_creditos_vu: {e}")
+            return None

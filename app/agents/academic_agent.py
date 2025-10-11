@@ -58,6 +58,8 @@ class AcademicAgent:
                 return await self._handle_professors(query)
             elif query_type == "aulas":
                 return await self._handle_classrooms(query, user_info)
+            elif query_type == "creditos_vu":
+                return await self._handle_creditos_vu(user_info)
             else:
                 return await self._handle_general_academic(user_info)
 
@@ -75,6 +77,8 @@ class AcademicAgent:
             return "profesores"
         elif any(word in query for word in ["aula", "dónde", "donde", "ubicación"]):
             return "aulas"
+        elif any(word in query for word in ["credito", "creditos", "vu", "vida universitaria"]):
+            return "creditos_vu"
         else:
             return "general"
 
@@ -185,6 +189,24 @@ Estás inscripto en las siguientes materias:
             logger.error(f"Error consultando aulas: {e}")
             return "😅 Hubo un problema consultando la información de aulas."
 
+    async def _handle_creditos_vu(self, user_info: Dict[str, Any]) -> str:
+        """Maneja consultas sobre créditos VU"""
+        try:
+            result = await self.tools.consultar_creditos_vu({"alumno_id": user_info["id"]})
+
+            if result:
+                return self._format_creditos_vu_response(result, user_info["nombre"])
+            else:
+                return f"""¡Hola {user_info['nombre']}! 😅
+
+No pude obtener información sobre tus créditos de Vida Universitaria en este momento.
+
+Por favor intentá de nuevo o contactá a la secretaría académica."""
+
+        except Exception as e:
+            logger.error(f"Error obteniendo créditos VU: {e}")
+            return self._get_error_response(user_info)
+
     async def _handle_general_academic(self, user_info: Dict[str, Any]) -> str:
         """Maneja consultas académicas generales"""
         return f"""¡Hola {user_info['nombre']}! 🎓
@@ -265,6 +287,60 @@ Puedo contarte sobre:
             response += f"   • Estado: {estado}\n\n"
 
         response += "¿Necesitás información específica sobre alguna materia? 😊"
+        return response
+
+    def _format_creditos_vu_response(self, data: Dict[str, Any], nombre: str) -> str:
+        """Formatea la respuesta de créditos VU"""
+        creditos_actuales = data.get('creditos_actuales', 0)
+        creditos_necesarios = data.get('creditos_necesarios', 10)
+        creditos_faltantes = data.get('creditos_faltantes', 10)
+        porcentaje = data.get('porcentaje_completado', 0)
+        cumple = data.get('cumple_requisito', False)
+        
+        # Emoji según progreso
+        if cumple:
+            emoji_status = "✅"
+            status_text = "**¡Felicitaciones! Ya cumplís con el requisito.**"
+        elif porcentaje >= 75:
+            emoji_status = "🔵"
+            status_text = "Estás muy cerca de completar el requisito."
+        elif porcentaje >= 50:
+            emoji_status = "🟡"
+            status_text = "Vas por buen camino."
+        else:
+            emoji_status = "🟠"
+            status_text = "Aún te quedan varios créditos por completar."
+        
+        # Barra de progreso visual
+        barra_llena = int(porcentaje / 10)  # 10 bloques
+        barra_vacia = 10 - barra_llena
+        barra = "█" * barra_llena + "░" * barra_vacia
+        
+        response = f"""¡Hola {nombre}! 🎓
+
+**Créditos de Vida Universitaria (VU)**
+
+{emoji_status} {status_text}
+
+📊 **Progreso:**
+{barra} {porcentaje}%
+
+📝 **Detalle:**
+• Créditos actuales: **{creditos_actuales}**
+• Créditos necesarios: **{creditos_necesarios}**
+• Créditos faltantes: **{creditos_faltantes}**
+
+💡 **¿Qué son los créditos VU?**
+Son actividades extracurriculares obligatorias para recibir tu título. Incluyen:
+• Talleres deportivos
+• Actividades culturales
+• Voluntariado universitario
+• Charlas y conferencias
+"""
+        
+        if not cumple:
+            response += "\n¿Querés saber más sobre actividades disponibles para sumar créditos? 😊"
+        
         return response
 
     def _get_error_response(self, user_info: Dict[str, Any]) -> str:
