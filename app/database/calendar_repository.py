@@ -1,88 +1,67 @@
 """
-Repositorio de calendario y exámenes - Consultas a Supabase
+Repositorio de calendario y exámenes - Consultas a Supabase con Pydantic Models
 """
-from typing import Optional, List, Dict, Any
-from datetime import datetime, date
+from typing import Optional, List
+from datetime import datetime, date, timedelta
 from app.database.supabase_client import SupabaseClient
 from app.utils.logger import get_logger
-import uuid
+from app.models import (
+    ExamenesRequest,
+    ExamenesResponse,
+    ExamenInfo,
+    CalendarioAcademicoRequest,
+    CalendarioAcademicoResponse,
+    EventoCalendario,
+    ProximosExamenesRequest,
+    TipoExamen,
+    Modalidad
+)
+from app.core import (
+    ValidationError,
+    InvalidUUIDError,
+    SupabaseError,
+    TIPOS_EXAMEN
+)
 
 logger = get_logger(__name__)
 
 
 class CalendarRepository:
-    """Repositorio para consultas de calendario y exámenes"""
+    """Repositorio para consultas de calendario y exámenes usando Pydantic"""
 
     def __init__(self):
         self.client = SupabaseClient.get_client()
 
     # =====================================================
-    # VALIDACIONES INTERNAS
-    # =====================================================
-
-    def _is_valid_uuid(self, uuid_string: str) -> bool:
-        """Valida si un string es un UUID válido"""
-        try:
-            uuid.UUID(str(uuid_string))
-            return True
-        except (ValueError, AttributeError, TypeError):
-            return False
-
-    def _validate_alumno_id(self, alumno_id: str) -> None:
-        """Valida que alumno_id sea un UUID válido"""
-        if not alumno_id:
-            raise ValueError("alumno_id no puede estar vacío")
-        if not self._is_valid_uuid(alumno_id):
-            raise ValueError(f"alumno_id '{alumno_id}' no es un UUID válido")
-
-    def _parse_date(self, date_str: Optional[str]) -> Optional[date]:
-        """Parsea un string de fecha a objeto date"""
-        if not date_str:
-            return None
-        try:
-            return datetime.strptime(date_str, '%Y-%m-%d').date()
-        except ValueError:
-            logger.warning(f"Fecha inválida: {date_str}")
-            return None
-
-    # =====================================================
     # TOOL 1: GET EXÁMENES ALUMNO
     # =====================================================
 
-    async def get_examenes_alumno(
-        self,
-        alumno_id: str,
-        materia_nombre: Optional[str] = None,
-        fecha_desde: Optional[str] = None,
-        fecha_hasta: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def get_examenes_alumno(self, request: ExamenesRequest) -> ExamenesResponse:
         """
         Obtiene los exámenes del alumno
         
         Args:
-            alumno_id: UUID del alumno
-            materia_nombre: (Opcional) Filtrar por materia específica
-            fecha_desde: (Opcional) Fecha inicio (YYYY-MM-DD)
-            fecha_hasta: (Opcional) Fecha fin (YYYY-MM-DD)
+            request: ExamenesRequest validado con Pydantic
             
         Returns:
-            Dict con 'examenes' (lista) y 'total' (int)
+            ExamenesResponse con exámenes del alumno
+            
+        Raises:
+            InvalidUUIDError: Si alumno_id es inválido
+            SupabaseError: Si hay error en la consulta
         """
         try:
-            # Validación
-            self._validate_alumno_id(alumno_id)
-            
-            logger.info(f"Consultando exámenes para alumno {alumno_id}")
+            logger.info(f"Consultando exámenes para alumno {request.alumno_id}")
             
             # Obtener inscripciones del alumno
             inscripciones = self.client.table('inscripciones') \
                 .select('comision_id') \
-                .eq('alumno_id', alumno_id) \
+                .eq('alumno_id', request.alumno_id) \
                 .execute()
             
             if not inscripciones.data:
-                logger.info(f"Alumno {alumno_id} no tiene inscripciones")
-                return {"examenes": [], "total": 0}
+                logger.info(f"Alumno {request.alumno_id} no tiene inscripciones")
+                return ExamenesResponse(examenes=[], total=0)
             
             comision_ids = [insc['comision_id'] for insc in inscripciones.data]
             logger.info(f"Alumno tiene {len(comision_ids)} comisiones")
@@ -93,21 +72,25 @@ class CalendarRepository:
                 .in_('comision_id', comision_ids) \
                 .order('fecha', desc=False)
             
+            # Filtrar por tipo si se especificó
+            if request.tipo_examen:
+                query = query.eq('tipo', request.tipo_examen.value)
+            
             # Filtrar por fechas si se especificaron
-            if fecha_desde:
-                query = query.gte('fecha', fecha_desde)
-            if fecha_hasta:
-                query = query.lte('fecha', fecha_hasta)
+            if request.fecha_desde:
+                query = query.gte('fecha', request.fecha_desde.isoformat())
+            if request.fecha_hasta:
+                query = query.lte('fecha', request.fecha_hasta.isoformat())
             
             examenes_response = query.execute()
             
             if not examenes_response.data:
-                logger.info(f"No se encontraron exámenes para alumno {alumno_id}")
-                return {"examenes": [], "total": 0}
+                logger.info(f"No se encontraron exámenes para alumno {request.alumno_id}")
+                return ExamenesResponse(examenes=[], total=0)
             
             logger.info(f"Se encontraron {len(examenes_response.data)} exámenes")
             
-            # Enriquecer con datos de materia (queries separadas)
+            # Enriquecer con datos de materia
             examenes = []
             for examen in examenes_response.data:
                 try:
@@ -137,30 +120,36 @@ class CalendarRepository:
                     materia_nombre_db = materia.get('nombre', 'N/A')
                     
                     # Filtrar por materia si se especificó
-                    if materia_nombre and materia_nombre.lower() not in materia_nombre_db.lower():
+                    if request.materia_nombre and request.materia_nombre.lower() not in materia_nombre_db.lower():
                         continue
                     
                     # Formatear nombre del examen
-                    nombre_examen = self._format_exam_name(
-                        examen['tipo'],
-                        examen.get('numero')
+                    tipo_examen = TipoExamen(examen['tipo'])
+                    nombre_examen = self._format_exam_name(tipo_examen, examen.get('numero'))
+                    
+                    # Parsear fecha
+                    fecha_examen = examen['fecha']
+                    if isinstance(fecha_examen, str):
+                        fecha_examen = datetime.strptime(fecha_examen, '%Y-%m-%d').date()
+                    
+                    # Crear modelo Pydantic
+                    examen_info = ExamenInfo(
+                        materia=materia_nombre_db,
+                        materia_codigo=materia.get('codigo', 'N/A'),
+                        comision=comision.get('codigo_comision', 'N/A'),
+                        tipo=tipo_examen,
+                        numero=examen.get('numero'),
+                        nombre=nombre_examen,
+                        fecha=fecha_examen,
+                        hora_inicio=str(examen['hora_inicio']),
+                        hora_fin=str(examen['hora_fin']),
+                        aula=examen.get('aula', 'A confirmar'),
+                        edificio=examen.get('edificio', 'Campus Principal'),
+                        modalidad=Modalidad(examen.get('modalidad', 'presencial')),
+                        observaciones=examen.get('observaciones')
                     )
                     
-                    examenes.append({
-                        "materia": materia_nombre_db,
-                        "materia_codigo": materia.get('codigo', 'N/A'),
-                        "comision": comision.get('codigo_comision', 'N/A'),
-                        "tipo": examen['tipo'],
-                        "numero": examen.get('numero'),
-                        "nombre": nombre_examen,
-                        "fecha": examen['fecha'],
-                        "hora_inicio": str(examen['hora_inicio']),
-                        "hora_fin": str(examen['hora_fin']),
-                        "aula": examen.get('aula', 'A confirmar'),
-                        "edificio": examen.get('edificio', 'Campus Principal'),
-                        "modalidad": examen.get('modalidad', 'presencial'),
-                        "observaciones": examen.get('observaciones')
-                    })
+                    examenes.append(examen_info)
                 
                 except Exception as e:
                     logger.error(f"Error procesando examen {examen.get('id')}: {e}")
@@ -168,32 +157,15 @@ class CalendarRepository:
             
             logger.info(f"Se formatearon {len(examenes)} exámenes exitosamente")
             
-            return {
-                "examenes": examenes,
-                "total": len(examenes)
-            }
+            return ExamenesResponse(examenes=examenes, total=len(examenes))
             
-        except ValueError as e:
-            logger.error(f"Error de validación en get_examenes_alumno: {e}")
-            raise
         except Exception as e:
             logger.error(f"Error obteniendo exámenes: {e}", exc_info=True)
-            return {
-                "examenes": [],
-                "total": 0,
-                "error": str(e)
-            }
+            raise SupabaseError(str(e), operation="get_examenes_alumno")
 
-    def _format_exam_name(self, tipo: str, numero: Optional[int]) -> str:
+    def _format_exam_name(self, tipo: TipoExamen, numero: Optional[int]) -> str:
         """Formatea el nombre del examen"""
-        tipo_map = {
-            'parcial': 'Parcial',
-            'recuperatorio': 'Recuperatorio',
-            'final': 'Final',
-            'trabajo_practico': 'Trabajo Práctico'
-        }
-        
-        nombre_base = tipo_map.get(tipo, tipo.capitalize())
+        nombre_base = TIPOS_EXAMEN.get(tipo.value, tipo.value.capitalize())
         
         if numero:
             return f"{nombre_base} {numero}"
@@ -203,39 +175,32 @@ class CalendarRepository:
     # TOOL 2: GET CALENDARIO ACADÉMICO
     # =====================================================
 
-    async def get_calendario_academico(
-        self,
-        tipo_evento: Optional[str] = None,
-        fecha_desde: Optional[str] = None,
-        fecha_hasta: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def get_calendario_academico(self, request: CalendarioAcademicoRequest) -> CalendarioAcademicoResponse:
         """
         Obtiene eventos del calendario académico usando la tabla vectorizada
         
         Args:
-            tipo_evento: (Opcional) Tipo de evento a buscar
-            fecha_desde: (Opcional) Fecha inicio (YYYY-MM-DD)
-            fecha_hasta: (Opcional) Fecha fin (YYYY-MM-DD)
+            request: CalendarioAcademicoRequest validado
             
         Returns:
-            Dict con 'eventos' (lista) y 'total' (int)
+            CalendarioAcademicoResponse con eventos
         """
         try:
-            logger.info(f"Consultando calendario académico: tipo={tipo_evento}, desde={fecha_desde}, hasta={fecha_hasta}")
+            logger.info(f"Consultando calendario académico: tipo={request.tipo_evento}, desde={request.fecha_desde}, hasta={request.fecha_hasta}")
             
             # Query base
             query = self.client.table('calendario_vectorizado') \
                 .select('id, tipo_evento, contenido_original, metadata')
             
             # Filtrar por tipo de evento si se especificó
-            if tipo_evento:
-                query = query.ilike('tipo_evento', f'%{tipo_evento}%')
+            if request.tipo_evento:
+                query = query.ilike('tipo_evento', f'%{request.tipo_evento}%')
             
             response = query.execute()
             
             if not response.data:
                 logger.info("No se encontraron eventos en el calendario")
-                return {"eventos": [], "total": 0}
+                return CalendarioAcademicoResponse(eventos=[], total=0)
             
             # Procesar y filtrar eventos
             eventos = []
@@ -244,92 +209,82 @@ class CalendarRepository:
                     metadata = item.get('metadata', {})
                     
                     # Extraer fecha del metadata
-                    fecha_evento = metadata.get('fecha')
+                    fecha_evento_str = metadata.get('fecha')
+                    fecha_evento = None
+                    
+                    if fecha_evento_str:
+                        try:
+                            fecha_evento = datetime.strptime(fecha_evento_str, '%Y-%m-%d').date()
+                        except ValueError:
+                            logger.warning(f"Fecha inválida en metadata: {fecha_evento_str}")
                     
                     # Filtrar por rango de fechas si se especificó
-                    if fecha_desde or fecha_hasta:
+                    if request.fecha_desde or request.fecha_hasta:
                         if not fecha_evento:
                             continue
                         
-                        fecha_obj = self._parse_date(fecha_evento)
-                        if not fecha_obj:
+                        if request.fecha_desde and fecha_evento < request.fecha_desde:
                             continue
                         
-                        if fecha_desde:
-                            fecha_desde_obj = self._parse_date(fecha_desde)
-                            if fecha_desde_obj and fecha_obj < fecha_desde_obj:
-                                continue
-                        
-                        if fecha_hasta:
-                            fecha_hasta_obj = self._parse_date(fecha_hasta)
-                            if fecha_hasta_obj and fecha_obj > fecha_hasta_obj:
-                                continue
+                        if request.fecha_hasta and fecha_evento > request.fecha_hasta:
+                            continue
                     
-                    eventos.append({
-                        "tipo": item.get('tipo_evento', 'N/A'),
-                        "titulo": metadata.get('titulo', item.get('contenido_original', 'Evento')[:50]),
-                        "descripcion": item.get('contenido_original'),
-                        "fecha": fecha_evento,
-                        "metadata": metadata
-                    })
+                    # Crear modelo Pydantic
+                    evento = EventoCalendario(
+                        tipo=item.get('tipo_evento', 'N/A'),
+                        titulo=metadata.get('titulo', item.get('contenido_original', 'Evento')[:50]),
+                        descripcion=item.get('contenido_original', ''),
+                        fecha=fecha_evento,
+                        metadata=metadata
+                    )
+                    
+                    eventos.append(evento)
                 
                 except Exception as e:
                     logger.error(f"Error procesando evento {item.get('id')}: {e}")
                     continue
             
-            # Ordenar por fecha
-            eventos.sort(key=lambda x: x.get('fecha') or '9999-12-31')
+            # Ordenar por fecha (eventos sin fecha al final)
+            eventos.sort(key=lambda x: x.fecha if x.fecha else date(9999, 12, 31))
             
             logger.info(f"Se encontraron {len(eventos)} eventos del calendario")
             
-            return {
-                "eventos": eventos,
-                "total": len(eventos)
-            }
+            return CalendarioAcademicoResponse(eventos=eventos, total=len(eventos))
             
         except Exception as e:
             logger.error(f"Error obteniendo calendario académico: {e}", exc_info=True)
-            return {
-                "eventos": [],
-                "total": 0,
-                "error": str(e)
-            }
+            raise SupabaseError(str(e), operation="get_calendario_academico")
 
     # =====================================================
     # HELPER: GET PRÓXIMOS EXÁMENES
     # =====================================================
 
-    async def get_proximos_examenes(
-        self,
-        alumno_id: str,
-        dias: int = 7
-    ) -> Dict[str, Any]:
+    async def get_proximos_examenes(self, request: ProximosExamenesRequest) -> ExamenesResponse:
         """
         Obtiene los próximos exámenes del alumno en los próximos N días
         
         Args:
-            alumno_id: UUID del alumno
-            dias: Cantidad de días a futuro (default: 7)
+            request: ProximosExamenesRequest validado
             
         Returns:
-            Dict con 'examenes' próximos
+            ExamenesResponse con exámenes próximos
         """
         try:
-            fecha_hoy = datetime.now().date().isoformat()
-            fecha_limite = (datetime.now().date()).isoformat()
+            fecha_hoy = date.today()
+            fecha_limite = fecha_hoy + timedelta(days=request.dias)
             
-            from datetime import timedelta
-            fecha_limite = (datetime.now().date() + timedelta(days=dias)).isoformat()
-            
-            return await self.get_examenes_alumno(
-                alumno_id=alumno_id,
+            # Crear request para get_examenes_alumno
+            examenes_request = ExamenesRequest(
+                alumno_id=request.alumno_id,
                 fecha_desde=fecha_hoy,
                 fecha_hasta=fecha_limite
             )
             
+            return await self.get_examenes_alumno(examenes_request)
+            
         except Exception as e:
             logger.error(f"Error obteniendo próximos exámenes: {e}")
-            return {"examenes": [], "total": 0, "error": str(e)}
+            raise SupabaseError(str(e), operation="get_proximos_examenes")
 
 
 # Instancia global del repositorio
