@@ -1,13 +1,26 @@
+"""
+Herramientas de calendario usando Pydantic Models
+"""
 from typing import Dict, Any, Optional
+from datetime import datetime
 from app.database.calendar_repository import calendar_repository
+from app.models import (
+    ExamenesRequest,
+    ExamenesResponse,
+    CalendarioAcademicoRequest,
+    CalendarioAcademicoResponse,
+    ProximosExamenesRequest,
+    TipoExamen
+)
 from app.utils.logger import get_logger
+from pydantic import ValidationError
 
 logger = get_logger(__name__)
 
+
 class CalendarTools:
     """
-    Herramientas de calendario que llaman directamente a Supabase
-    (sin pasar por n8n)
+    Herramientas de calendario que usan Pydantic para validación
     """
 
     def __init__(self):
@@ -20,22 +33,25 @@ class CalendarTools:
         Parámetros esperados:
         - alumno_id: ID del alumno (requerido)
         - materia_nombre: (opcional) Nombre específico de materia
-        - fecha_desde: (opcional) Fecha desde (YYYY-MM-DD)
-        - fecha_hasta: (opcional) Fecha hasta (YYYY-MM-DD)
+        - fecha_desde: (opcional) Fecha desde (YYYY-MM-DD o date object)
+        - fecha_hasta: (opcional) Fecha hasta (YYYY-MM-DD o date object)
+        - tipo_examen: (opcional) Tipo de examen
 
         Respuesta:
         {
             "examenes": [
                 {
                     "materia": "Nativa Digital",
+                    "materia_codigo": "ND-2025",
+                    "comision": "COM-A",
                     "tipo": "parcial",
                     "numero": 1,
                     "nombre": "Parcial 1",
                     "fecha": "2025-11-15",
-                    "hora_inicio": "14:00:00",
-                    "hora_fin": "16:00:00",
+                    "hora_inicio": "14:00",
+                    "hora_fin": "16:00",
                     "aula": "R3",
-                    "edificio": "Edificio Central",
+                    "edificio": "Campus Principal",
                     "modalidad": "presencial",
                     "observaciones": "Temas 1 a 4"
                 }
@@ -44,19 +60,50 @@ class CalendarTools:
         }
         """
         try:
-            alumno_id = params.get('alumno_id')
-            materia_nombre = params.get('materia_nombre') or params.get('materia')
+            # Parsear fechas si vienen como string
             fecha_desde = params.get('fecha_desde')
             fecha_hasta = params.get('fecha_hasta')
             
-            logger.info(f"Consultando exámenes: alumno_id={alumno_id}, materia={materia_nombre}")
+            if fecha_desde and isinstance(fecha_desde, str):
+                try:
+                    fecha_desde = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
+                except ValueError:
+                    fecha_desde = None
             
-            return await self.repository.get_examenes_alumno(
-                alumno_id=alumno_id,
-                materia_nombre=materia_nombre,
+            if fecha_hasta and isinstance(fecha_hasta, str):
+                try:
+                    fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
+                except ValueError:
+                    fecha_hasta = None
+            
+            # Parsear tipo de examen si viene como string
+            tipo_examen = params.get('tipo_examen')
+            if tipo_examen and isinstance(tipo_examen, str):
+                try:
+                    tipo_examen = TipoExamen(tipo_examen)
+                except ValueError:
+                    tipo_examen = None
+            
+            # Crear Request Pydantic (con validación automática)
+            request = ExamenesRequest(
+                alumno_id=params.get('alumno_id'),
+                materia_nombre=params.get('materia_nombre') or params.get('materia'),
                 fecha_desde=fecha_desde,
-                fecha_hasta=fecha_hasta
+                fecha_hasta=fecha_hasta,
+                tipo_examen=tipo_examen
             )
+            
+            logger.info(f"Consultando exámenes: alumno_id={request.alumno_id}, materia={request.materia_nombre}")
+            
+            # Llamar al repository con el request validado
+            response: ExamenesResponse = await self.repository.get_examenes_alumno(request)
+            
+            # Convertir response a dict para mantener compatibilidad
+            return response.dict()
+            
+        except ValidationError as e:
+            logger.error(f"Error de validación en consultar_examenes: {e}")
+            return None
         except Exception as e:
             logger.error(f"Error en consultar_examenes: {e}")
             return None
@@ -67,8 +114,8 @@ class CalendarTools:
 
         Parámetros esperados:
         - tipo_evento: (opcional) Tipo de evento a buscar
-        - fecha_desde: (opcional) Fecha desde (YYYY-MM-DD)
-        - fecha_hasta: (opcional) Fecha hasta (YYYY-MM-DD)
+        - fecha_desde: (opcional) Fecha desde (YYYY-MM-DD o date object)
+        - fecha_hasta: (opcional) Fecha hasta (YYYY-MM-DD o date object)
 
         Respuesta:
         {
@@ -85,17 +132,40 @@ class CalendarTools:
         }
         """
         try:
-            tipo_evento = params.get('tipo_evento')
+            # Parsear fechas si vienen como string
             fecha_desde = params.get('fecha_desde') or params.get('fecha_inicio')
             fecha_hasta = params.get('fecha_hasta') or params.get('fecha_fin')
             
-            logger.info(f"Consultando calendario: tipo={tipo_evento}, desde={fecha_desde}, hasta={fecha_hasta}")
+            if fecha_desde and isinstance(fecha_desde, str):
+                try:
+                    fecha_desde = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
+                except ValueError:
+                    fecha_desde = None
             
-            return await self.repository.get_calendario_academico(
-                tipo_evento=tipo_evento,
+            if fecha_hasta and isinstance(fecha_hasta, str):
+                try:
+                    fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
+                except ValueError:
+                    fecha_hasta = None
+            
+            # Crear Request Pydantic
+            request = CalendarioAcademicoRequest(
+                tipo_evento=params.get('tipo_evento'),
                 fecha_desde=fecha_desde,
                 fecha_hasta=fecha_hasta
             )
+            
+            logger.info(f"Consultando calendario: tipo={request.tipo_evento}, desde={request.fecha_desde}, hasta={request.fecha_hasta}")
+            
+            # Llamar al repository
+            response: CalendarioAcademicoResponse = await self.repository.get_calendario_academico(request)
+            
+            # Convertir a dict
+            return response.dict()
+            
+        except ValidationError as e:
+            logger.error(f"Error de validación en calendario_academico: {e}")
+            return None
         except Exception as e:
             logger.error(f"Error en calendario_academico: {e}")
             return None
@@ -111,15 +181,23 @@ class CalendarTools:
         Respuesta: Similar a consultar_examenes pero filtrado por fecha
         """
         try:
-            alumno_id = params.get('alumno_id')
-            dias = params.get('dias', 7)
-            
-            logger.info(f"Consultando próximos exámenes: alumno_id={alumno_id}, días={dias}")
-            
-            return await self.repository.get_proximos_examenes(
-                alumno_id=alumno_id,
-                dias=dias
+            # Crear Request Pydantic
+            request = ProximosExamenesRequest(
+                alumno_id=params.get('alumno_id'),
+                dias=params.get('dias', 7)
             )
+            
+            logger.info(f"Consultando próximos exámenes: alumno_id={request.alumno_id}, días={request.dias}")
+            
+            # Llamar al repository
+            response: ExamenesResponse = await self.repository.get_proximos_examenes(request)
+            
+            # Convertir a dict
+            return response.dict()
+            
+        except ValidationError as e:
+            logger.error(f"Error de validación en proximos_examenes: {e}")
+            return None
         except Exception as e:
             logger.error(f"Error en proximos_examenes: {e}")
             return None

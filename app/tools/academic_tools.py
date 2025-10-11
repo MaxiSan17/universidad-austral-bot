@@ -1,13 +1,29 @@
+"""
+Herramientas académicas usando Pydantic Models
+"""
 from typing import Dict, Any, Optional
 from app.database.academic_repository import academic_repository
+from app.models import (
+    HorariosRequest,
+    HorariosResponse,
+    InscripcionesRequest,
+    InscripcionesResponse,
+    ProfesorRequest,
+    ProfesorResponse,
+    AulaRequest,
+    AulaResponse,
+    CreditosVURequest,
+    CreditosVUResponse
+)
 from app.utils.logger import get_logger
+from pydantic import ValidationError
 
 logger = get_logger(__name__)
 
+
 class AcademicTools:
     """
-    Herramientas académicas que ahora llaman directamente a Supabase
-    (sin pasar por n8n)
+    Herramientas académicas que usan Pydantic para validación
     """
 
     def __init__(self):
@@ -26,32 +42,40 @@ class AcademicTools:
         {
             "horarios": [
                 {
-                    "materia_nombre": "Nativa Digital",
                     "dia_semana": 1,
+                    "materia_nombre": "Nativa Digital",
+                    "materia_codigo": "ND-2025",
+                    "comision": "COM-A",
                     "hora_inicio": "14:00",
                     "hora_fin": "16:00",
                     "aula": "R3",
-                    "edificio": "Edificio Central",
+                    "edificio": "Campus Principal",
                     "modalidad": "presencial",
-                    "tipo_clase": "teorica",
-                    "profesor_nombre": "Profesor por confirmar"
+                    "profesor_nombre": "García Martínez"
                 }
             ],
             "total": 4
         }
         """
         try:
-            alumno_id = params.get('alumno_id')
-            materia_nombre = params.get('materia_nombre')
-            dia_semana = params.get('dia_semana')
-            
-            logger.info(f"Consultando horarios: alumno_id={alumno_id}, materia={materia_nombre}, dia={dia_semana}")
-            
-            return await self.repository.get_horarios_alumno(
-                alumno_id=alumno_id,
-                materia_nombre=materia_nombre,
-                dia_semana=dia_semana
+            # Crear Request Pydantic (con validación automática)
+            request = HorariosRequest(
+                alumno_id=params.get('alumno_id'),
+                materia_nombre=params.get('materia_nombre'),
+                dia_semana=params.get('dia_semana')
             )
+            
+            logger.info(f"Consultando horarios: alumno_id={request.alumno_id}")
+            
+            # Llamar al repository con el request validado
+            response: HorariosResponse = await self.repository.get_horarios_alumno(request)
+            
+            # Convertir response a dict para mantener compatibilidad
+            return response.dict()
+            
+        except ValidationError as e:
+            logger.error(f"Error de validación en consultar_horarios: {e}")
+            return None
         except Exception as e:
             logger.error(f"Error en consultar_horarios: {e}")
             return None
@@ -62,30 +86,42 @@ class AcademicTools:
 
         Parámetros esperados:
         - alumno_id: ID del alumno
+        - estado: (opcional) Filtrar por estado
 
         Respuesta:
         {
             "materias": [
                 {
-                    "nombre": "Nativa Digital",
-                    "codigo": "ND-2025",
-                    "comision": "COM-A",
-                    "carrera": "Negocios Digitales",
-                    "cuatrimestre": 2,
+                    "materia_id": "uuid",
+                    "materia_nombre": "Nativa Digital",
+                    "materia_codigo": "ND-2025",
+                    "comision_id": "uuid",
+                    "comision_codigo": "COM-A",
                     "estado": "cursando",
-                    "asistencia": 100,
-                    "nota_cursada": null
+                    "fecha_inscripcion": "2025-08-01"
                 }
             ],
             "total": 2
         }
         """
         try:
-            alumno_id = params.get('alumno_id')
+            # Crear Request Pydantic
+            request = InscripcionesRequest(
+                alumno_id=params.get('alumno_id'),
+                estado=params.get('estado')
+            )
             
-            logger.info(f"Consultando inscripciones: alumno_id={alumno_id}")
+            logger.info(f"Consultando inscripciones: alumno_id={request.alumno_id}")
             
-            return await self.repository.get_inscripciones(alumno_id=alumno_id)
+            # Llamar al repository
+            response: InscripcionesResponse = await self.repository.get_inscripciones(request)
+            
+            # Convertir a dict
+            return response.dict()
+            
+        except ValidationError as e:
+            logger.error(f"Error de validación en ver_inscripciones: {e}")
+            return None
         except Exception as e:
             logger.error(f"Error en ver_inscripciones: {e}")
             return None
@@ -96,34 +132,38 @@ class AcademicTools:
 
         Parámetros esperados:
         - profesor_nombre: (opcional) Nombre del profesor
-        - materia: (opcional) Nombre de la materia
+        - materia_nombre: (opcional) Nombre de la materia
 
         Respuesta:
         {
-            "profesores": [
-                {
-                    "nombre": "Juan",
-                    "apellido": "Pérez",
-                    "nombre_completo": "Juan Pérez",
-                    "email": "juan.perez@austral.edu.ar",
-                    "telefono": "+54...",
-                    "materia": "Nativa Digital",
-                    "comision": "COM-A"
-                }
-            ],
-            "total": 1
+            "profesor": {
+                "id": "uuid",
+                "nombre": "Juan Pérez",
+                "email": "juan.perez@austral.edu.ar",
+                "departamento": "Informática",
+                "materias": ["Nativa Digital"]
+            },
+            "encontrado": true
         }
         """
         try:
-            profesor_nombre = params.get('profesor_nombre') or params.get('nombre_profesor')
-            materia_nombre = params.get('materia') or params.get('materia_nombre')
-            
-            logger.info(f"Buscando profesor: nombre={profesor_nombre}, materia={materia_nombre}")
-            
-            return await self.repository.get_profesor_info(
-                profesor_nombre=profesor_nombre,
-                materia_nombre=materia_nombre
+            # Crear Request Pydantic
+            request = ProfesorRequest(
+                profesor_nombre=params.get('profesor_nombre') or params.get('nombre_profesor'),
+                materia_nombre=params.get('materia') or params.get('materia_nombre')
             )
+            
+            logger.info(f"Buscando profesor: nombre={request.profesor_nombre}, materia={request.materia_nombre}")
+            
+            # Llamar al repository
+            response: ProfesorResponse = await self.repository.get_profesor_info(request)
+            
+            # Convertir a dict
+            return response.dict()
+            
+        except ValidationError as e:
+            logger.error(f"Error de validación en buscar_profesor: {e}")
+            return None
         except Exception as e:
             logger.error(f"Error en buscar_profesor: {e}")
             return None
@@ -134,33 +174,38 @@ class AcademicTools:
 
         Parámetros esperados:
         - aula: (opcional) Código del aula
-        - materia: (opcional) Nombre de la materia
-        - alumno_id: (opcional) ID del alumno
+        - materia_nombre: (opcional) Nombre de la materia
 
         Respuesta:
         {
-            "aulas": [
-                {
-                    "aula": "R3",
-                    "edificio": "Edificio Central",
-                    "materias": ["Nativa Digital"]
-                }
-            ],
-            "total": 1
+            "aula": {
+                "codigo_aula": "R3",
+                "edificio": "Campus Principal",
+                "capacidad": 40,
+                "tipo": "Teórico",
+                "materias": ["Nativa Digital"]
+            },
+            "encontrada": true
         }
         """
         try:
-            aula = params.get('aula')
-            materia_nombre = params.get('materia') or params.get('materia_nombre')
-            alumno_id = params.get('alumno_id')
-            
-            logger.info(f"Consultando aula: aula={aula}, materia={materia_nombre}, alumno={alumno_id}")
-            
-            return await self.repository.get_aula_info(
-                aula=aula,
-                materia_nombre=materia_nombre,
-                alumno_id=alumno_id
+            # Crear Request Pydantic
+            request = AulaRequest(
+                aula=params.get('aula'),
+                materia_nombre=params.get('materia') or params.get('materia_nombre')
             )
+            
+            logger.info(f"Consultando aula: aula={request.aula}, materia={request.materia_nombre}")
+            
+            # Llamar al repository
+            response: AulaResponse = await self.repository.get_aula_info(request)
+            
+            # Convertir a dict
+            return response.dict()
+            
+        except ValidationError as e:
+            logger.error(f"Error de validación en consultar_aula: {e}")
+            return None
         except Exception as e:
             logger.error(f"Error en consultar_aula: {e}")
             return None
@@ -174,19 +219,32 @@ class AcademicTools:
 
         Respuesta:
         {
-            "creditos_actuales": 8,
-            "creditos_necesarios": 10,
-            "creditos_faltantes": 2,
-            "porcentaje_completado": 80,
-            "cumple_requisito": False
+            "creditos": {
+                "creditos_actuales": 8,
+                "creditos_necesarios": 10,
+                "creditos_faltantes": 2,
+                "porcentaje_completado": 80,
+                "cumple_requisito": false
+            }
         }
         """
         try:
-            alumno_id = params.get('alumno_id')
+            # Crear Request Pydantic
+            request = CreditosVURequest(
+                alumno_id=params.get('alumno_id')
+            )
             
-            logger.info(f"Consultando créditos VU: alumno_id={alumno_id}")
+            logger.info(f"Consultando créditos VU: alumno_id={request.alumno_id}")
             
-            return await self.repository.get_creditos_vu(alumno_id=alumno_id)
+            # Llamar al repository
+            response: CreditosVUResponse = await self.repository.get_creditos_vu(request)
+            
+            # Convertir a dict
+            return response.dict()
+            
+        except ValidationError as e:
+            logger.error(f"Error de validación en consultar_creditos_vu: {e}")
+            return None
         except Exception as e:
             logger.error(f"Error en consultar_creditos_vu: {e}")
             return None
