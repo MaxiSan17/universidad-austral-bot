@@ -264,7 +264,8 @@ Puedo ayudarte con:
         if len(tipos_count) > 1:
             output += "\n📊 **Resumen:**\n"
             for tipo, count in tipos_count.items():
-                tipo_name = tipo.value.capitalize()
+                # tipo ya es string por use_enum_values=True
+                tipo_name = tipo.capitalize() if isinstance(tipo, str) else tipo.value.capitalize()
                 output += f"• {count} {tipo_name}(es)\n"
 
         output += f"\n¿Necesitás información sobre algún examen específico? {EMOJIS['ayuda']}"
@@ -277,7 +278,9 @@ Puedo ayudarte con:
         output += f"   {EMOJIS['calendario']} Fecha: {examen.fecha.strftime('%d/%m/%Y')}\n"
         output += f"   ⏰ Horario: {examen.hora_inicio} a {examen.hora_fin}\n"
         output += f"   {EMOJIS['aula']} Aula: {examen.aula} ({examen.edificio})\n"
-        output += f"   🔵 Modalidad: {examen.modalidad.value.capitalize()}\n"
+        # modalidad ya es string por use_enum_values=True
+        modalidad_text = examen.modalidad.capitalize() if isinstance(examen.modalidad, str) else examen.modalidad.value.capitalize()
+        output += f"   🔵 Modalidad: {modalidad_text}\n"
 
         # Usar property dias_hasta_examen
         if examen.dias_hasta_examen >= 0:

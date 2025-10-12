@@ -291,7 +291,7 @@ Puedo contarte sobre:
             for horario in horarios_del_dia:
                 # Usar properties del modelo
                 output += f"• {horario.materia_nombre} - {horario.hora_inicio} a {horario.hora_fin}\n"
-                output += f"  {EMOJIS['aula']} Aula {horario.aula} ({horario.modalidad.value})\n"
+                output += f"  {EMOJIS['aula']} Aula {horario.aula} ({horario.modalidad})\n"
 
                 if horario.profesor_nombre:
                     output += f"  {EMOJIS['profesor']} Prof. {horario.profesor_nombre}\n"
