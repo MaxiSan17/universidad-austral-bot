@@ -188,8 +188,8 @@ class SupervisorAgent:
 
 Tu rol es analizar la consulta del usuario y decidir qué agente especializado debe manejarla:
 
-- academic: Consultas sobre horarios, materias, profesores, aulas
-- financial: Consultas sobre estado de cuenta, pagos, créditos VU
+- academic: Consultas sobre horarios, materias, profesores, aulas, inscripciones, créditos VU
+- financial: Consultas sobre estado de cuenta, pagos, deudas, facturación
 - policies: Consultas sobre reglamentos, syllabus, políticas académicas
 - calendar: Consultas sobre fechas de exámenes, calendario académico
 - escalation: Cuando necesitas derivar a un humano
