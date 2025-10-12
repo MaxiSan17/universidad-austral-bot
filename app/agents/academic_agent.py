@@ -321,7 +321,8 @@ Puedo contarte sobre:
                 output += f" ({inscripcion.materia_codigo})"
 
             output += f"\n   • Comisión: {inscripcion.comision_codigo}\n"
-            output += f"   • Estado: {inscripcion.estado.value}\n"
+            # estado ya es string por use_enum_values=True
+            output += f"   • Estado: {inscripcion.estado}\n"
 
             # Usar property esta_cursando
             if inscripcion.esta_cursando:
