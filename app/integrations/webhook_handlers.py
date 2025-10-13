@@ -105,7 +105,12 @@ async def n8n_webhook(
 
         # Parsear payload
         raw_payload = await request.json()
-        logger.debug(f"Payload recibido desde n8n: {json.dumps(raw_payload, indent=2)}")
+        
+        # LOG COMPLETO DEL PAYLOAD (para debugging)
+        logger.info("=" * 80)
+        logger.info("📦 PAYLOAD COMPLETO DESDE N8N:")
+        logger.info(json.dumps(raw_payload, indent=2))
+        logger.info("=" * 80)
 
         # VALIDAR MESSAGE_TYPE - Ignorar mensajes outgoing
         message_type = raw_payload.get("message_type", "").lstrip("=")
