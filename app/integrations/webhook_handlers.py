@@ -187,13 +187,25 @@ def _normalize_n8n_payload(raw_payload: Dict[str, Any]) -> Dict[str, str]:
     Soporta:
     - Formato completo con session, user, message_data
     - Formato simplificado con session_id, message directamente
+    - Formato con teléfono explícito
     """
     # Formato simplificado directo de n8n
     if "message" in raw_payload and isinstance(raw_payload["message"], str):
         # Limpiar valores que empiezan con "=" (error común de n8n)
         message = raw_payload["message"].lstrip("=")
         conversation_id = raw_payload.get("conversation_id", "").lstrip("=")
-        session_id = conversation_id or raw_payload.get("session_id", "unknown")
+        
+        # PRIORIDAD: Usar teléfono si está disponible
+        telefono = raw_payload.get("telefono", "").lstrip("=")
+        
+        if telefono:
+            session_id = telefono
+            logger.info(f"☎️ Usando teléfono como session_id: {telefono}")
+        elif conversation_id:
+            session_id = conversation_id
+            logger.warning(f"⚠️ Usando conversation_id como session_id (falta teléfono): {conversation_id}")
+        else:
+            session_id = raw_payload.get("session_id", "unknown")
         
         return {
             "session_id": session_id,
