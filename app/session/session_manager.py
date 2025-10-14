@@ -1,7 +1,7 @@
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
-from app.config import settings
+from app.core.config import settings
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)

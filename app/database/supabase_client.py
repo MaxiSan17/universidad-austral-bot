@@ -2,7 +2,7 @@
 Cliente de Supabase para gestión de usuarios
 """
 from supabase import create_client, Client
-from app.config import settings
+from app.core.config import settings
 from app.utils.logger import get_logger
 from typing import Optional, Dict, Any
 from types import SimpleNamespace

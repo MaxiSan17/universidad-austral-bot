@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.config import settings
+from app.core.config import settings
 from app.integrations.webhook_handlers import webhook_router
 from app.utils.logger import setup_logging
 import logging

@@ -1,65 +1,23 @@
-from pydantic_settings import BaseSettings
-from typing import Optional
-import os
+"""
+DEPRECATED: Este archivo es legacy y redirige a app.core.config
 
-class Settings(BaseSettings):
-    """Configuration settings using Pydantic v2"""
+Todos los nuevos imports deben usar:
+    from app.core.config import settings
 
-    # Environment
-    ENVIRONMENT: str = "development"
-    DEBUG: bool = True
+Este archivo se mantiene solo para compatibilidad con código existente.
+"""
+import warnings
 
-    # LLM Configuration
-    LLM_MODEL: str = "gpt-4o-mini"
-    OPENAI_API_KEY: Optional[str] = None
-    ANTHROPIC_API_KEY: Optional[str] = None
-    GOOGLE_API_KEY: Optional[str] = None
+# Importar todo desde app.core.config
+from app.core.config import settings, get_settings, Settings
 
-    # LangSmith Configuration
-    LANGCHAIN_TRACING_V2: bool = False
-    LANGCHAIN_API_KEY: Optional[str] = None
-    LANGCHAIN_PROJECT: str = "universidad-austral-bot"
+# Mostrar warning en desarrollo
+if settings.is_development:
+    warnings.warn(
+        "app.config is deprecated. Use 'from app.core.config import settings' instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
 
-    # Database
-    DATABASE_URL: str = "postgresql://postgres:password@localhost:5432/universidad_austral"
-    SUPABASE_URL: Optional[str] = None
-    SUPABASE_ANON_KEY: Optional[str] = None
-
-    # Chatwoot Integration
-    CHATWOOT_URL: Optional[str] = None
-    CHATWOOT_API_TOKEN: Optional[str] = None
-    CHATWOOT_ACCOUNT_ID: Optional[str] = None
-    CHATWOOT_WEBHOOK_SECRET: Optional[str] = None
-
-    # WhatsApp Configuration
-    WHATSAPP_VERIFY_TOKEN: Optional[str] = None
-    WHATSAPP_ACCESS_TOKEN: Optional[str] = None
-
-    # n8n Integration
-    N8N_WEBHOOK_BASE_URL: str = "https://n8n.tucbbs.com.ar/webhook"
-    N8N_WEBHOOK_URL: str = "https://n8n.tucbbs.com.ar/webhook"
-    N8N_API_KEY: Optional[str] = None
-    N8N_API_BASE_URL: str = "https://n8n.tucbbs.com.ar/webhook"
-
-    # Session Management
-    SESSION_TTL_MINUTES: int = 60
-    REDIS_URL: str = "redis://localhost:6379"
-
-    # Security
-    SECRET_KEY: str = "your-secret-key-change-in-production"
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-
-    # Rate Limiting
-    RATE_LIMIT_PER_MINUTE: int = 60
-
-    # Monitoring
-    PROMETHEUS_ENABLED: bool = True
-    LOG_LEVEL: str = "INFO"
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
-
-# Global settings instance
-settings = Settings()
+# Exportar para compatibilidad
+__all__ = ['settings', 'get_settings', 'Settings']

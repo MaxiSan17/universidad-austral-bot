@@ -6,7 +6,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.language_models import BaseChatModel
-from app.config import settings
+from app.core.config import settings
 from app.core.llm_factory import llm_factory
 from app.session.session_manager import session_manager
 from app.utils.logger import get_logger
