@@ -46,11 +46,19 @@ class UserRepository:
             SimpleNamespace con datos del usuario o None si no existe
         """
         try:
+            logger.info(f"🔍 Intentando buscar usuario con DNI: {dni}")
+            logger.info(f"📡 Supabase URL: {settings.SUPABASE_URL}")
+            logger.info(f"🔑 Supabase Key (primeros 20 chars): {settings.SUPABASE_ANON_KEY[:20]}...")
+            
             response = self.client.table("usuarios").select("*").eq("dni", dni).execute()
+            
+            logger.info(f"📊 Response data: {response.data}")
+            logger.info(f"📊 Response count: {response.count if hasattr(response, 'count') else 'N/A'}")
             
             if response.data and len(response.data) > 0:
                 user_data = response.data[0]
-                logger.info(f"Usuario encontrado en Supabase: {user_data.get('nombre')} {user_data.get('apellido')}")
+                logger.info(f"✅ Usuario encontrado en Supabase: {user_data.get('nombre')} {user_data.get('apellido')}")
+                logger.info(f"📋 Datos completos del usuario: {user_data.keys()}")
                 
                 # Convertir a SimpleNamespace para compatibilidad con código existente
                 return SimpleNamespace(
@@ -65,11 +73,11 @@ class UserRepository:
                     email=user_data.get("email")
                 )
             else:
-                logger.warning(f"Usuario con DNI {dni} no encontrado en Supabase")
+                logger.warning(f"⚠️ Usuario con DNI {dni} no encontrado en Supabase")
                 return None
                 
         except Exception as e:
-            logger.error(f"Error buscando usuario en Supabase: {e}", exc_info=True)
+            logger.error(f"❌ Error buscando usuario en Supabase: {e}", exc_info=True)
             return None
     
     async def get_user_by_phone(self, phone: str) -> Optional[SimpleNamespace]:
