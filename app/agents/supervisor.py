@@ -14,6 +14,7 @@ from app.agents.academic_agent import AcademicAgent
 from app.agents.financial_agent import FinancialAgent
 from app.agents.policies_agent import PoliciesAgent
 from app.agents.calendar_agent import CalendarAgent
+from app.agents.query_classifier import query_classifier
 import json
 
 logger = get_logger(__name__)
@@ -223,43 +224,157 @@ class SupervisorAgent:
         return state
 
     async def _supervisor_node(self, state: AgentState) -> AgentState:
-        """Nodo supervisor que decide la estrategia"""
+        """Nodo supervisor que decide la estrategia con clasificación mejorada"""
 
         system_prompt = """Eres el supervisor de un sistema de agentes para la Universidad Austral.
 
-Tu rol es analizar la consulta del usuario y decidir qué agente especializado debe manejarla:
+Tu trabajo es analizar cada consulta del usuario y clasificarla en UNA de estas categorías:
 
-- academic: Consultas sobre horarios, materias, profesores, aulas, inscripciones, créditos VU
-- financial: Consultas sobre estado de cuenta, pagos, deudas, facturación
-- policies: Consultas sobre reglamentos, syllabus, políticas académicas
-- calendar: Consultas sobre fechas de exámenes, calendario académico
-- escalation: Cuando necesitas derivar a un humano
+## 🎓 ACADEMIC (Agente Académico)
+Responsable de:
+- Horarios de clases y cursada
+- Materias inscriptas y disponibles
+- Información de profesores
+- Ubicación de aulas y salones
+- Créditos de Vida Universitaria (VU)
+- Inscripciones a materias
+- Comisiones y grupos de clase
 
-Analiza el último mensaje del usuario y decide el agente más apropiado.
-Responde SOLO con el nombre del agente: academic, financial, policies, calendar, o escalation.
+Ejemplos de consultas:
+- "¿Cuándo tengo clases?"
+- "¿A qué hora curso [materia]?"
+- "¿En qué aula tengo clase?"
+- "¿Quién es el profesor de [materia]?"
+- "¿En qué materias estoy inscripto?"
+- "¿Cuántos créditos VU tengo?"
+- "¿Dónde es la clase de mañana?"
+- "Horario de [materia]"
 
-Si la consulta no está clara o es general, usa 'academic' como default.
+## 📅 CALENDAR (Agente de Calendario)
+Responsable de:
+- Fechas de exámenes (parciales, finales, recuperatorios)
+- Calendario académico
+- Eventos universitarios
+- Feriados y días no laborables
+- Fechas de inscripción
+- Inicio y fin de cuatrimestre
+
+Ejemplos de consultas:
+- "¿Cuándo es el parcial/final de [materia]?"
+- "¿Qué exámenes tengo esta semana?"
+- "¿Cuándo empiezan las clases?"
+- "¿Hay feriados próximos?"
+- "Calendario de exámenes"
+- "¿Cuándo es el próximo evento?"
+- "Fechas importantes"
+
+## 💰 FINANCIAL (Agente Financiero)
+Responsable de:
+- Estado de cuenta
+- Pagos y deudas
+- Cuotas y vencimientos
+- Facturación
+- Aranceles
+- Consultas sobre montos
+
+Ejemplos de consultas:
+- "¿Tengo deudas?"
+- "¿Cuánto debo?"
+- "¿Cuándo vence mi próximo pago?"
+- "Estado de mi cuenta"
+- "¿Cómo pago?"
+- "Información de facturación"
+
+## 📚 POLICIES (Agente de Políticas)
+Responsable de:
+- Reglamentos universitarios
+- Syllabi y programas de materias
+- Políticas académicas
+- Requisitos de carrera
+- Bibliografía
+- Contenidos de materias
+- FAQs institucionales
+
+Ejemplos de consultas:
+- "¿Qué temas vemos en [materia]?"
+- "¿Cómo se evalúa en [materia]?"
+- "¿Cuál es el reglamento de asistencia?"
+- "¿Qué bibliografía usa [materia]?"
+- "Programa de la materia"
+- "Requisitos para [trámite]"
+
+## 🆘 ESCALATION (Derivar a Humano)
+Cuando:
+- El usuario pide explícitamente hablar con una persona
+- La consulta es muy compleja o sensible
+- Hay frustración evidente (>3 intentos fallidos)
+- Temas de privacidad o confidencialidad
+- Problemas técnicos no resolubles
+
+---
+
+## INSTRUCCIONES DE CLASIFICACIÓN:
+
+1. **Lee la consulta completa** del usuario
+2. **Identifica las palabras clave** más importantes
+3. **Detecta la intención principal** (¿qué quiere saber/hacer?)
+4. **Considera el contexto temporal**:
+   - "cuándo" + "parcial/final/examen" → calendar
+   - "cuándo" + "clase/horario" → academic
+5. **Elige el agente MÁS específico** que puede responder
+6. **Si hay duda entre dos agentes**, prioriza:
+   - calendar > academic (si menciona exámenes o fechas)
+   - academic > policies (si menciona info práctica vs teórica)
+   - financial siempre tiene prioridad si menciona dinero
+
+## RESPUESTA:
+
+Responde SOLO con UNA palabra (el nombre del agente):
+- academic
+- calendar
+- financial
+- policies
+- escalation
+
+NO agregues explicaciones, puntos, o texto adicional.
 """
 
         try:
-            messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=state["messages"][-1].content)
-            ]
+            user_query = state["messages"][-1].content
+            
+            # PASO 1: Intentar clasificación rápida con keywords
+            agent_choice, confidence, method = query_classifier.classify(user_query)
+            
+            # PASO 2: Si no hay resultado claro, usar LLM
+            if agent_choice is None or confidence < 0.5:
+                logger.info(f"🤖 Usando LLM para clasificación (method={method}, conf={confidence})")
+                
+                messages = [
+                    SystemMessage(content=system_prompt),
+                    HumanMessage(content=user_query)
+                ]
 
-            response = await self.llm.ainvoke(messages)
-            agent_choice = response.content.strip().lower()
+                response = await self.llm.ainvoke(messages)
+                agent_choice = response.content.strip().lower()
+                method = "llm"
+                confidence = 0.85  # Asumimos alta confianza del LLM
 
             # Validar la respuesta
             valid_agents = ["academic", "financial", "policies", "calendar", "escalation"]
             if agent_choice not in valid_agents:
+                logger.warning(f"⚠️ Agente inválido: {agent_choice}. Usando 'academic' como fallback")
                 agent_choice = "academic"  # Default
+                confidence = 0.3
+                method = "fallback"
 
             state["next"] = agent_choice
+            state["confidence_score"] = confidence
             state["agent_scratchpad"]["supervisor_choice"] = agent_choice
-            state["agent_scratchpad"]["supervisor_reasoning"] = f"Elegí {agent_choice} para: {state['messages'][-1].content[:100]}"
+            state["agent_scratchpad"]["classification_method"] = method
+            state["agent_scratchpad"]["classification_confidence"] = confidence
+            state["agent_scratchpad"]["supervisor_reasoning"] = f"Elegí {agent_choice} [{method}] (conf: {confidence:.2f}) para: {user_query[:100]}"
 
-            logger.info(f"Supervisor eligió agente: {agent_choice}")
+            logger.info(f"🎯 Supervisor → {agent_choice.upper()} [{method}] (confianza: {confidence:.2f})")
             
         except Exception as e:
             logger.error(f"Error en supervisor node: {e}")

@@ -189,7 +189,7 @@ class LLMFactory:
         # Configuraciones específicas por tipo de agente
         agent_configs = {
             "supervisor": {
-                "temperature": 0.0,
+                "temperature": 0.3,  # Aumentado para mejor clasificación
                 "model": settings.LLM_MODEL
             },
             "academic": {
