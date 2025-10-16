@@ -96,6 +96,54 @@ Este documento define la estructura de mensajes que n8n debe enviar al bot de la
   },
   "timestamp": "2024-09-29T10:30:05Z"
 }
+
+## Streaming de respuestas (opcional)
+
+Para simular “streaming” en canales que no soportan indicador de escritura (p. ej., WhatsApp vía Twilio), el bot puede devolver la respuesta fragmentada.
+
+### Solicitud (desde n8n al bot)
+
+Agregar flags opcionales en el payload:
+
+```json
+{
+  "source": "whatsapp",
+  "session_id": "whatsapp_5491123456789",
+  "message": "¿Cuándo tengo clases?",
+  "stream": true,
+  "stream_chunk_chars": 320,
+  "stream_min_chunk_chars": 120,
+  "stream_chunk_delay_ms": 800
+}
+```
+
+### Respuesta del bot con chunks
+
+```json
+{
+  "status": "success",
+  "session_id": "whatsapp_5491123456789",
+  "response": {
+    "content": "Respuesta completa (compatibilidad)",
+    "message_type": "text",
+    "metadata": {
+      "source": "whatsapp",
+      "confidence_score": 0.9,
+      "agent_used": "supervisor",
+      "escalation_required": false
+    }
+  },
+  "response_stream": {
+    "mode": "chunks",
+    "chunks": ["Hola María…", "Para esta semana tienes…", "El viernes…"],
+    "chunk_delay_ms": 800,
+    "message_type": "text"
+  },
+  "timestamp": "2024-09-29T10:30:05Z"
+}
+```
+
+En n8n se recomienda iterar `response.response_stream.chunks` y enviar cada elemento como un mensaje separado con una espera de `chunk_delay_ms` entre cada envío.
 ```
 
 ## Integración con n8n Workflows

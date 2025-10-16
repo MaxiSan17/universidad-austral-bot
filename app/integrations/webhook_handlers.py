@@ -9,6 +9,7 @@ from app.utils.logger import get_logger
 import json
 import httpx
 from datetime import datetime
+import re
 
 logger = get_logger(__name__)
 
@@ -129,8 +130,19 @@ async def n8n_webhook(
 
         logger.info(f"Mensaje desde n8n - Source: {source}, Session: {session_id}")
 
-        # Procesar mensaje con el supervisor
+        # Leer opciones de streaming (opcionales, para controlarlas desde n8n)
+        stream_requested = bool(raw_payload.get("stream", False))
+        chunk_chars = int(raw_payload.get("stream_chunk_chars", 320))
+        min_chunk_chars = int(raw_payload.get("stream_min_chunk_chars", 120))
+        chunk_delay_ms = int(raw_payload.get("stream_chunk_delay_ms", 800))  # sugerencia para el orquestador
+
+        # Procesar mensaje con el supervisor (respuesta completa)
         response = await supervisor_agent.process_message(user_message, session_id)
+
+        # Si se solicita streaming, generar chunks
+        response_chunks = None
+        if stream_requested and isinstance(response, str) and response.strip():
+            response_chunks = _chunk_text(response, max_chars=chunk_chars, min_chars=min_chunk_chars)
 
         # Si viene de Chatwoot y tenemos conversation_id, enviar respuesta directamente
         if conversation_id and settings.CHATWOOT_API_TOKEN:
@@ -144,7 +156,7 @@ async def n8n_webhook(
                 logger.error(f"❌ Error enviando mensaje a Chatwoot: {e}", exc_info=True)
 
         # Preparar respuesta estructurada para n8n
-        response_payload = {
+        response_payload: Dict[str, Any] = {
             "status": "success",
             "session_id": session_id,
             "response": {
@@ -159,6 +171,15 @@ async def n8n_webhook(
             },
             "timestamp": datetime.utcnow().isoformat() + "Z"
         }
+
+        # Adjuntar stream si fue solicitado para que n8n despache los mensajes parciales
+        if stream_requested and response_chunks:
+            response_payload["response_stream"] = {
+                "mode": "chunks",
+                "chunks": response_chunks,
+                "chunk_delay_ms": chunk_delay_ms,
+                "message_type": "text"
+            }
 
         logger.info(f"Respuesta enviada a n8n para sesión {session_id}")
         return JSONResponse(response_payload)
@@ -232,6 +253,59 @@ def _normalize_n8n_payload(raw_payload: Dict[str, Any]) -> Dict[str, str]:
         "source": raw_payload.get("source", "unknown"),
         "conversation_id": raw_payload.get("conversation_id")
     }
+
+
+def _chunk_text(text: str, max_chars: int = 320, min_chars: int = 120) -> list:
+    """Divide texto en chunks naturales por oraciones con límites de tamaño.
+
+    - Intenta cortar por fin de oración (., !, ?) respetando espacios
+    - Garantiza que cada chunk tenga al menos min_chars (salvo el último)
+    - No supera max_chars por chunk si es posible
+    """
+    if not text:
+        return []
+
+    # Normalizar espacios
+    normalized = re.sub(r"\s+", " ", text).strip()
+
+    # Separar en oraciones básicas
+    sentences = re.split(r"(?<=[\.\!\?])\s+", normalized)
+    chunks = []
+    current = ""
+
+    for sent in sentences:
+        if not sent:
+            continue
+        candidate = (current + " " + sent).strip() if current else sent
+
+        if len(candidate) <= max_chars:
+            current = candidate
+        else:
+            # Si el actual es muy corto, forzar corte por longitud en lugar de oración
+            if current and len(current) >= min_chars:
+                chunks.append(current)
+                current = sent
+                # Si aún excede, cortar por longitud dura
+                while len(current) > max_chars:
+                    chunks.append(current[:max_chars])
+                    current = current[max_chars:]
+            else:
+                # No había suficiente para un chunk natural; cortar por longitud
+                piece = candidate[:max_chars]
+                chunks.append(piece)
+                remainder = candidate[max_chars:]
+                current = remainder.strip()
+
+    if current:
+        chunks.append(current)
+
+    # Ajuste final: si el último chunk es muy pequeño, combinar con el anterior
+    if len(chunks) >= 2 and len(chunks[-1]) < min_chars:
+        combined = chunks[-2] + " " + chunks[-1]
+        if len(combined) <= max_chars * 2:  # evitar crecer demasiado
+            chunks = chunks[:-2] + [combined.strip()]
+
+    return chunks
 
 
 @webhook_router.post("/chatwoot")
