@@ -1,7 +1,7 @@
 """
 Cliente de Supabase para gestión de usuarios
 """
-from supabase import create_client, Client
+from supabase import create_client, Client, ClientOptions
 from app.core.config import settings
 from app.utils.logger import get_logger
 from typing import Optional, Dict, Any
@@ -21,16 +21,18 @@ class SupabaseClient:
             if not settings.SUPABASE_URL or not settings.SUPABASE_ANON_KEY:
                 raise ValueError("SUPABASE_URL y SUPABASE_ANON_KEY deben estar configurados")
             
-            # IMPORTANTE: Para bypass RLS, necesitamos usar la SERVICE_ROLE_KEY
-            # y configurar el cliente correctamente
+            # IMPORTANTE: Para bypass RLS, configurar Authorization header
+            # con la SERVICE_ROLE_KEY
+            client_options = ClientOptions(
+                headers={
+                    "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}"
+                }
+            )
+            
             cls._instance = create_client(
                 settings.SUPABASE_URL,
                 settings.SUPABASE_ANON_KEY,  # Esta es la SERVICE_ROLE_KEY (mal nombrada en config)
-                options={
-                    "headers": {
-                        "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}"
-                    }
-                }
+                options=client_options
             )
             logger.info("✅ Cliente de Supabase inicializado con SERVICE_ROLE_KEY (bypass RLS)")
         
