@@ -167,7 +167,7 @@ class SupervisorAgent:
                 
                 response = f"¡Hola de nuevo, {user.nombre}! 👋\n\n¿En qué te puedo ayudar hoy?"
                 state["messages"].append(AIMessage(content=response))
-                state["next"] = "END"
+                state["next"] = "supervisor"
                 return state
             else:
                 logger.error(f"⚠️ Usuario {usuario_id} no encontrado en BD. Eliminando asociación inválida.")
@@ -340,7 +340,9 @@ NO agregues explicaciones, puntos, o texto adicional.
 """
 
         try:
-            user_query = state["messages"][-1].content
+            # Usar el último mensaje HUMANO, ignorando mensajes previos del bot
+            human_messages = [msg for msg in state["messages"] if isinstance(msg, HumanMessage)]
+            user_query = human_messages[-1].content if human_messages else state["messages"][-1].content
             
             # PASO 1: Intentar clasificación rápida con keywords
             agent_choice, confidence, method = query_classifier.classify(user_query)
