@@ -68,7 +68,7 @@ class CalendarRepository:
             
             # Obtener exámenes de esas comisiones
             query = self.client.table('examenes') \
-                .select('id, tipo, numero, fecha, hora_inicio, hora_fin, aula, edificio, modalidad, observaciones, comision_id') \
+                .select('id, tipo, numero, fecha, hora_inicio, hora_fin, aula, modalidad, observaciones, comision_id') \
                 .in_('comision_id', comision_ids) \
                 .order('fecha', desc=False)
             
@@ -150,7 +150,6 @@ class CalendarRepository:
                         hora_inicio=hora_inicio,
                         hora_fin=hora_fin,
                         aula=examen.get('aula', 'A confirmar'),
-                        edificio=examen.get('edificio', 'Campus Principal'),
                         modalidad=Modalidad(examen.get('modalidad', 'presencial')),
                         observaciones=examen.get('observaciones')
                     )

@@ -108,7 +108,6 @@ class ExamenInfo(BaseModelConfig):
     hora_inicio: str = Field(..., description="Hora de inicio (HH:MM)")
     hora_fin: str = Field(..., description="Hora de fin (HH:MM)")
     aula: str = Field(..., description="Aula del examen")
-    edificio: str = Field(default="Campus Principal", description="Edificio")
     modalidad: Modalidad = Field(default=Modalidad.PRESENCIAL, description="Modalidad del examen")
     observaciones: Optional[str] = Field(None, description="Observaciones adicionales")
     
