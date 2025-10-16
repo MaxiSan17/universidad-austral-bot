@@ -277,7 +277,7 @@ Puedo ayudarte con:
         output = f"{examen.emoji} **{examen.materia}** - {examen.nombre}\n"
         output += f"   {EMOJIS['calendario']} Fecha: {examen.fecha.strftime('%d/%m/%Y')}\n"
         output += f"   ⏰ Horario: {examen.hora_inicio} a {examen.hora_fin}\n"
-        output += f"   {EMOJIS['aula']} Aula: {examen.aula} ({examen.edificio})\n"
+        output += f"   {EMOJIS['aula']} Aula: {examen.aula}\n"
         # modalidad ya es string por use_enum_values=True
         modalidad_text = examen.modalidad.capitalize() if isinstance(examen.modalidad, str) else examen.modalidad.value.capitalize()
         output += f"   🔵 Modalidad: {modalidad_text}\n"
