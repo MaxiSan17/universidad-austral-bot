@@ -21,11 +21,18 @@ class SupabaseClient:
             if not settings.SUPABASE_URL or not settings.SUPABASE_ANON_KEY:
                 raise ValueError("SUPABASE_URL y SUPABASE_ANON_KEY deben estar configurados")
             
+            # IMPORTANTE: Para bypass RLS, necesitamos usar la SERVICE_ROLE_KEY
+            # y configurar el cliente correctamente
             cls._instance = create_client(
                 settings.SUPABASE_URL,
-                settings.SUPABASE_ANON_KEY
+                settings.SUPABASE_ANON_KEY,  # Esta es la SERVICE_ROLE_KEY (mal nombrada en config)
+                options={
+                    "headers": {
+                        "Authorization": f"Bearer {settings.SUPABASE_ANON_KEY}"
+                    }
+                }
             )
-            logger.info("Cliente de Supabase inicializado correctamente")
+            logger.info("✅ Cliente de Supabase inicializado con SERVICE_ROLE_KEY (bypass RLS)")
         
         return cls._instance
 
