@@ -3,6 +3,7 @@ Configuración consolidada de la aplicación usando Pydantic Settings
 Migrado desde app/config.py + app/core/config.py original
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 from typing import Optional
 from functools import lru_cache
 

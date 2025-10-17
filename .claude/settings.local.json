@@ -5,7 +5,9 @@
       "Bash(mkdir:*)",
       "Bash(pip install:*)",
       "Bash(python:*)",
-      "WebFetch(domain:docs.langchain.com)"
+      "WebFetch(domain:docs.langchain.com)",
+      "Bash(docker-compose restart:*)",
+      "Bash(docker compose restart:*)"
     ],
     "deny": [],
     "ask": []
