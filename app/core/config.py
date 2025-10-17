@@ -109,10 +109,10 @@ class Settings(BaseSettings):
     # ==========================================
     # LANGSMITH (OBSERVABILIDAD)
     # ==========================================
-    langchain_tracing_v2: bool = False
-    langchain_api_key: Optional[str] = None
-    langchain_project: str = "universidad-austral-bot"
-    langchain_endpoint: str = "https://api.smith.langchain.com"
+    langchain_tracing_v2: Optional[str] = Field(None, env="LANGCHAIN_TRACING_V2")
+    langchain_api_key: Optional[str] = Field(None, env="LANGCHAIN_API_KEY")
+    langchain_project: str = Field("universidad-austral-bot", env="LANGCHAIN_PROJECT")
+    langchain_endpoint: str = Field("https://api.smith.langchain.com", env="LANGCHAIN_ENDPOINT")
     
     # ==========================================
     # SENTRY (ERROR TRACKING)
@@ -186,6 +186,32 @@ class Settings(BaseSettings):
             "temperature": self.llm_temperature,
             "max_tokens": self.llm_max_tokens
         }
+
+    @property
+    def langsmith_enabled(self) -> bool:
+        """Verifica si LangSmith está habilitado"""
+        return (
+            self.langchain_tracing_v2 == "true"
+            and self.langchain_api_key is not None
+            and len(self.langchain_api_key) > 0
+        )
+
+    def setup_langsmith(self):
+        """Configura LangSmith si está habilitado"""
+        if self.langsmith_enabled:
+            import os
+            os.environ["LANGCHAIN_TRACING_V2"] = "true"
+            os.environ["LANGCHAIN_API_KEY"] = self.langchain_api_key
+            os.environ["LANGCHAIN_PROJECT"] = self.langchain_project
+            os.environ["LANGCHAIN_ENDPOINT"] = self.langchain_endpoint
+            # Usar logging básico para evitar dependencias circulares
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"✅ LangSmith tracing habilitado - Proyecto: {self.langchain_project}")
+        else:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info("⚠️ LangSmith tracing deshabilitado (falta configuración)")
     
     # ==========================================
     # ALIASES PARA COMPATIBILIDAD (UPPERCASE)
@@ -298,7 +324,7 @@ class Settings(BaseSettings):
         return self.log_level
     
     @property
-    def LANGCHAIN_TRACING_V2(self) -> bool:
+    def LANGCHAIN_TRACING_V2(self) -> Optional[str]:
         return self.langchain_tracing_v2
     
     @property
@@ -318,10 +344,12 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """
     Obtiene la instancia singleton de settings.
-    
+
     Usa lru_cache para asegurar que solo se carga una vez.
     """
-    return Settings()
+    settings_instance = Settings()
+    settings_instance.setup_langsmith()
+    return settings_instance
 
 
 # Instancia global para importar fácilmente

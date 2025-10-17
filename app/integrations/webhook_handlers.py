@@ -87,6 +87,36 @@ class N8NWebhookPayload(BaseModel):
     class Config:
         populate_by_name = True
 
+
+async def _process_message_callback(session_id: str, combined_message: str):
+    """
+    Callback que procesa el mensaje combinado después del debouncing.
+    Se ejecuta cuando no hay más mensajes nuevos por N segundos.
+    """
+    try:
+        logger.info(f"🤖 Procesando mensaje combinado para [{session_id}]: {combined_message[:100]}...")
+
+        # Procesar con el supervisor CON STREAMING
+        response = await supervisor_agent.process_message_stream(combined_message, session_id)
+
+        # Si hay conversation_id, enviar respuesta a Chatwoot
+        session = session_manager.get_session(session_id)
+        if session and session.conversation_id:
+            conversation_id = session.conversation_id
+            if settings.CHATWOOT_API_TOKEN:
+                try:
+                    await send_message_to_chatwoot(
+                        conversation_id=int(conversation_id),
+                        message=response
+                    )
+                    logger.info(f"✅ Respuesta enviada a Chatwoot (conversation {conversation_id})")
+                except Exception as e:
+                    logger.error(f"❌ Error enviando a Chatwoot: {e}", exc_info=True)
+
+    except Exception as e:
+        logger.error(f"❌ Error en callback de procesamiento [{session_id}]: {e}", exc_info=True)
+
+
 @webhook_router.post("/n8n")
 async def n8n_webhook(
     request: Request,
@@ -128,61 +158,27 @@ async def n8n_webhook(
         source = normalized["source"]
         conversation_id = normalized.get("conversation_id")
 
+        # NUEVO: Guardar conversation_id en la sesión
+        session = session_manager.get_session(session_id)
+        if session and conversation_id:
+            session.conversation_id = conversation_id
+
         logger.info(f"Mensaje desde n8n - Source: {source}, Session: {session_id}")
 
-        # Leer opciones de streaming (opcionales, para controlarlas desde n8n)
-        stream_requested = bool(raw_payload.get("stream", False))
-        chunk_chars = int(raw_payload.get("stream_chunk_chars", 320))
-        min_chunk_chars = int(raw_payload.get("stream_min_chunk_chars", 120))
-        chunk_delay_ms = int(raw_payload.get("stream_chunk_delay_ms", 800))  # sugerencia para el orquestador
+        # NUEVO: Agregar mensaje a la queue con debouncing
+        await session_manager.message_queue.add_message(
+            session_id=session_id,
+            message=user_message,
+            process_callback=_process_message_callback
+        )
 
-        # Procesar mensaje con el supervisor (respuesta completa)
-        response = await supervisor_agent.process_message(user_message, session_id)
-
-        # Si se solicita streaming, generar chunks
-        response_chunks = None
-        if stream_requested and isinstance(response, str) and response.strip():
-            response_chunks = _chunk_text(response, max_chars=chunk_chars, min_chars=min_chunk_chars)
-
-        # Si viene de Chatwoot y tenemos conversation_id, enviar respuesta directamente
-        if conversation_id and settings.CHATWOOT_API_TOKEN:
-            try:
-                await send_message_to_chatwoot(
-                    conversation_id=int(conversation_id),
-                    message=response
-                )
-                logger.info(f"✅ Respuesta enviada a Chatwoot (conversation {conversation_id})")
-            except Exception as e:
-                logger.error(f"❌ Error enviando mensaje a Chatwoot: {e}", exc_info=True)
-
-        # Preparar respuesta estructurada para n8n
-        response_payload: Dict[str, Any] = {
-            "status": "success",
+        # Responder inmediatamente a n8n (el callback procesará después)
+        return JSONResponse({
+            "status": "queued",
             "session_id": session_id,
-            "response": {
-                "content": response,
-                "message_type": "text",
-                "metadata": {
-                    "source": source,
-                    "confidence_score": 0.9,
-                    "agent_used": "supervisor",
-                    "escalation_required": False
-                }
-            },
+            "message": "Mensaje agregado a cola de procesamiento",
             "timestamp": datetime.utcnow().isoformat() + "Z"
-        }
-
-        # Adjuntar stream si fue solicitado para que n8n despache los mensajes parciales
-        if stream_requested and response_chunks:
-            response_payload["response_stream"] = {
-                "mode": "chunks",
-                "chunks": response_chunks,
-                "chunk_delay_ms": chunk_delay_ms,
-                "message_type": "text"
-            }
-
-        logger.info(f"Respuesta enviada a n8n para sesión {session_id}")
-        return JSONResponse(response_payload)
+        })
 
     except HTTPException:
         raise

@@ -42,6 +42,11 @@ class SupervisorAgent:
         try:
             self.llm = llm_factory.create_for_agent("supervisor")
             logger.info("LLM del supervisor inicializado correctamente")
+
+            # Habilitar streaming
+            if hasattr(self.llm, "streaming"):
+                self.llm.streaming = True
+                logger.info("✅ Streaming habilitado en LLM del supervisor")
         except Exception as e:
             logger.error(f"Error inicializando LLM del supervisor: {e}")
             # Fallback a configuración básica
@@ -569,6 +574,84 @@ Te van a contactar en breve para resolver tu consulta.
 
         except Exception as e:
             logger.error(f"Error en SupervisorAgent.process_message: {e}", exc_info=True)
+            return "Hubo un error técnico. Por favor intentá de nuevo."
+
+    async def process_message_stream(self, message: str, session_id: str) -> str:
+        """
+        Procesa un mensaje a través del workflow LangGraph CON STREAMING.
+
+        Este método reemplaza a process_message() cuando se quiere streaming.
+        Los tokens del LLM se streamean en tiempo real.
+
+        Args:
+            message: Mensaje del usuario (puede ser múltiples mensajes unidos)
+            session_id: ID de sesión único
+
+        Returns:
+            Respuesta completa del sistema (para guardar en historial)
+        """
+        try:
+            # Estado inicial
+            initial_state: AgentState = {
+                "messages": [HumanMessage(content=message)],
+                "next": "authentication",
+                "user_info": {},
+                "session_id": session_id,
+                "agent_scratchpad": {},
+                "escalation_requested": False,
+                "confidence_score": 1.0
+            }
+
+            # Configuración con LangSmith tags
+            config = {
+                "configurable": {"thread_id": session_id},
+                "recursion_limit": 10,
+                "tags": [
+                    f"session:{session_id}",
+                    "streaming:enabled",
+                    "source:whatsapp"
+                ],
+                "metadata": {
+                    "session_id": session_id,
+                    "message_preview": message[:100],
+                    "timestamp": datetime.now().isoformat()
+                }
+            }
+
+            # Ejecutar workflow CON STREAMING
+            full_response = ""
+
+            async for event in self.app.astream_events(initial_state, config, version="v2"):
+                kind = event["event"]
+
+                # Capturar tokens del LLM
+                if kind == "on_chat_model_stream":
+                    chunk = event["data"]["chunk"]
+                    if hasattr(chunk, "content") and chunk.content:
+                        content = chunk.content
+                        full_response += content
+                        # Aquí se podría enviar a n8n en tiempo real si se implementa SSE
+                        logger.debug(f"🔤 Token: {content}")
+
+                # Log de nodos completados (para debugging)
+                elif kind == "on_chain_end":
+                    node_name = event.get("name", "unknown")
+                    logger.info(f"✅ Nodo completado: {node_name}")
+
+            # Si no hubo streaming, usar el método tradicional como fallback
+            if not full_response:
+                logger.warning("⚠️ No se capturaron tokens en streaming, usando método tradicional")
+                result = await self.app.ainvoke(initial_state, config)
+                ai_messages = [msg for msg in result["messages"] if isinstance(msg, AIMessage)]
+                if ai_messages:
+                    full_response = ai_messages[-1].content
+                else:
+                    full_response = "Lo siento, hubo un problema procesando tu mensaje."
+
+            return full_response
+
+        except Exception as e:
+            logger.error(f"❌ Error en SupervisorAgent.process_message_stream: {e}", exc_info=True)
             return "Hubo un error técnico. Por favor intentá de nuevo."
 
 # Instancia global del supervisor
