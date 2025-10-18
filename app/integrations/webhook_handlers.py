@@ -96,8 +96,8 @@ async def _process_message_callback(session_id: str, combined_message: str):
     try:
         logger.info(f"🤖 Procesando mensaje combinado para [{session_id}]: {combined_message[:100]}...")
 
-        # Procesar con el supervisor CON STREAMING
-        response = await supervisor_agent.process_message_stream(combined_message, session_id)
+        # Procesar con el supervisor (método tradicional - más confiable)
+        response = await supervisor_agent.process_message(combined_message, session_id)
 
         # Si hay conversation_id, enviar respuesta a Chatwoot
         session = session_manager.get_session(session_id)
