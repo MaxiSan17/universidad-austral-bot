@@ -579,89 +579,24 @@ Te van a contactar en breve para resolver tu consulta.
 
     async def process_message_stream(self, message: str, session_id: str) -> str:
         """
-        Procesa un mensaje a través del workflow LangGraph CON STREAMING.
-
-        Este método reemplaza a process_message() cuando se quiere streaming.
-        Los tokens del LLM se streamean en tiempo real.
+        Procesa un mensaje a través del workflow LangGraph.
+        Usa ainvoke directamente (más confiable que astream_events para este caso).
 
         Args:
-            message: Mensaje del usuario (puede ser múltiples mensajes unidos)
+            message: Mensaje del usuario
             session_id: ID de sesión único
 
         Returns:
-            Respuesta completa del sistema (para guardar en historial)
+            Respuesta completa del sistema
         """
         try:
-            # Estado inicial
-            initial_state: AgentState = {
-                "messages": [HumanMessage(content=message)],
-                "next": "authentication",
-                "user_info": {},
-                "session_id": session_id,
-                "agent_scratchpad": {},
-                "escalation_requested": False,
-                "confidence_score": 1.0
-            }
-
-            # Configuración con LangSmith tags
-            config = {
-                "configurable": {"thread_id": session_id},
-                "recursion_limit": 10,
-                "tags": [
-                    f"session:{session_id}",
-                    "streaming:enabled",
-                    "source:whatsapp"
-                ],
-                "metadata": {
-                    "session_id": session_id,
-                    "message_preview": message[:100],
-                    "timestamp": datetime.now().isoformat()
-                }
-            }
-
-            # Ejecutar workflow CON STREAMING
-            full_response = ""
-
-            async for event in self.app.astream_events(initial_state, config, version="v2"):
-                kind = event["event"]
-
-                # Capturar tokens del LLM
-                if kind == "on_chat_model_stream":
-                    chunk = event["data"]["chunk"]
-                    if hasattr(chunk, "content") and chunk.content:
-                        content = chunk.content
-                        full_response += content
-                        # Aquí se podría enviar a n8n en tiempo real si se implementa SSE
-                        logger.debug(f"🔤 Token: {content}")
-
-                # Log de nodos completados (para debugging)
-                elif kind == "on_chain_end":
-                    node_name = event.get("name", "unknown")
-                    logger.info(f"✅ Nodo completado: {node_name}")
-
-            # Si no hubo streaming (agentes que no usan LLM), usar el método tradicional
-            if not full_response:
-                logger.info("ℹ️ No hubo streaming de LLM, usando respuesta directa del agente")
-                result = await self.app.ainvoke(initial_state, config)
-                ai_messages = [msg for msg in result["messages"] if isinstance(msg, AIMessage)]
-                if ai_messages:
-                    # Tomar el último mensaje que NO sea el nombre del agente
-                    for msg in reversed(ai_messages):
-                        if msg.content and len(msg.content) > 20:  # Filtrar respuestas muy cortas
-                            full_response = msg.content
-                            break
-                    
-                    # Si aún no hay respuesta, usar el último mensaje
-                    if not full_response and ai_messages:
-                        full_response = ai_messages[-1].content
-                
-                if not full_response:
-                    full_response = "Lo siento, hubo un problema procesando tu mensaje."
-
-            return full_response
+            logger.info(f"🚀 Procesando con streaming (sesión: {session_id})")
+            
+            # Delegar al método process_message que funciona correctamente
+            return await self.process_message(message, session_id)
 
         except Exception as e:
-            logger.error(f"❌ Error en SupervisorAgent.process_message_stream: {e}", exc_info=True)
+            logger.error(f"❌ Error en process_message_stream: {e}", exc_info=True)
             return "Hubo un error técnico. Por favor intentá de nuevo."
 
 # Instancia global del supervisor
