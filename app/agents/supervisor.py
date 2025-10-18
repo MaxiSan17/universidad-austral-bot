@@ -639,14 +639,23 @@ Te van a contactar en breve para resolver tu consulta.
                     node_name = event.get("name", "unknown")
                     logger.info(f"✅ Nodo completado: {node_name}")
 
-            # Si no hubo streaming, usar el método tradicional como fallback
+            # Si no hubo streaming (agentes que no usan LLM), usar el método tradicional
             if not full_response:
-                logger.warning("⚠️ No se capturaron tokens en streaming, usando método tradicional")
+                logger.info("ℹ️ No hubo streaming de LLM, usando respuesta directa del agente")
                 result = await self.app.ainvoke(initial_state, config)
                 ai_messages = [msg for msg in result["messages"] if isinstance(msg, AIMessage)]
                 if ai_messages:
-                    full_response = ai_messages[-1].content
-                else:
+                    # Tomar el último mensaje que NO sea el nombre del agente
+                    for msg in reversed(ai_messages):
+                        if msg.content and len(msg.content) > 20:  # Filtrar respuestas muy cortas
+                            full_response = msg.content
+                            break
+                    
+                    # Si aún no hay respuesta, usar el último mensaje
+                    if not full_response and ai_messages:
+                        full_response = ai_messages[-1].content
+                
+                if not full_response:
                     full_response = "Lo siento, hubo un problema procesando tu mensaje."
 
             return full_response
