@@ -15,11 +15,16 @@ services:
       - CHATWOOT_ACCOUNT_ID=${CHATWOOT_ACCOUNT_ID}
       - SUPABASE_URL=https://soyaxzdbxlgzzflbmskj.supabase.co
       - SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNveWF4emRieGxnenpmbGJtc2tqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDQ1MTg4MCwiZXhwIjoyMDc2MDI3ODgwfQ.Z8oRUVA392shgEH2zU7ecrxFDFOcMd9lBAqUigdSw30
-      # LangSmith - TODAS las variables necesarias
+      # LangSmith - Formato correcto según documentación oficial
+      - LANGSMITH_TRACING=${LANGSMITH_TRACING:-true}
+      - LANGSMITH_ENDPOINT=${LANGSMITH_ENDPOINT:-https://api.smith.langchain.com}
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY}
+      - LANGSMITH_PROJECT=${LANGSMITH_PROJECT:-universidad-austral-bot}
+      # LangChain (legacy compatibility - algunas versiones usan este formato)
       - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-true}
+      - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT:-https://api.smith.langchain.com}
       - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
       - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-universidad-austral-bot}
-      - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT:-https://api.smith.langchain.com}
     networks:
       - university_network
     restart: unless-stopped
