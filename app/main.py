@@ -7,16 +7,31 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configurar LangSmith explícitamente ANTES de imports
-os.environ["LANGCHAIN_TRACING_V2"] = os.getenv("LANGCHAIN_TRACING_V2", "false")
+# IMPORTANTE: Normalizar el valor de TRACING_V2 a string "true" o "false"
+raw_tracing = os.getenv("LANGCHAIN_TRACING_V2", "false")
+tracing_value = str(raw_tracing).lower().strip()
+
+print(f"🔍 LangSmith Debug - RAW VALUES:")
+print(f"  RAW from .env: '{raw_tracing}' (type: {type(raw_tracing).__name__})")
+print(f"  After lower/strip: '{tracing_value}'")
+
+if tracing_value in ["true", "1", "yes", "on"]:
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    print(f"  ✅ SET TO: 'true'")
+else:
+    os.environ["LANGCHAIN_TRACING_V2"] = "false"
+    print(f"  ❌ SET TO: 'false' (was: '{tracing_value}')")
+
 os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY", "")
 os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGCHAIN_PROJECT", "universidad-austral-bot")
 os.environ["LANGCHAIN_ENDPOINT"] = os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")
 
-print(f"🔍 LangSmith Debug:")
+print(f"\n🔍 LangSmith Config:")
 print(f"  LANGCHAIN_TRACING_V2: {os.environ.get('LANGCHAIN_TRACING_V2')}")
-print(f"  LANGCHAIN_API_KEY: {os.environ.get('LANGCHAIN_API_KEY', '')[:20]}...")
+print(f"  LANGCHAIN_API_KEY: {os.environ.get('LANGCHAIN_API_KEY', '')[:25]}... (len: {len(os.environ.get('LANGCHAIN_API_KEY', ''))})")
 print(f"  LANGCHAIN_PROJECT: {os.environ.get('LANGCHAIN_PROJECT')}")
 print(f"  LANGCHAIN_ENDPOINT: {os.environ.get('LANGCHAIN_ENDPOINT')}")
+print(f"  Enabled check: {os.environ.get('LANGCHAIN_TRACING_V2') == 'true'}\n")
 
 # AHORA sí importar el resto
 from app.core.config import settings
@@ -67,6 +82,7 @@ async def startup_event():
         logger.info(f"   Endpoint: {os.environ.get('LANGCHAIN_ENDPOINT')}")
     else:
         logger.warning("⚠️ LangSmith tracing DESHABILITADO")
+        logger.warning(f"   Valor actual: '{os.environ.get('LANGCHAIN_TRACING_V2')}'")
 
 @app.on_event("shutdown")
 async def shutdown_event():
