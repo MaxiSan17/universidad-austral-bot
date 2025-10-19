@@ -13,7 +13,10 @@ class PoliciesAgent:
     async def process_query(self, query: str, user_info: Dict[str, Any], context: Dict[str, Any]) -> str:
         """Procesa una consulta sobre políticas y reglamentos"""
         try:
-            query_type = self._classify_policies_query(query.lower())
+            # Normalizar query
+            query_normalized = query.lower().strip()
+
+            query_type = self._classify_policies_query(query_normalized)
             logger.info(f"Consulta de políticas clasificada como: {query_type}")
 
             if query_type == "syllabus":

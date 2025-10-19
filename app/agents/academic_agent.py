@@ -56,8 +56,11 @@ TONO: Amigable, informativo y profesional. Usa emojis apropiados.
     async def process_query(self, query: str, user_info: Dict[str, Any], context: Dict[str, Any]) -> str:
         """Procesa una consulta académica"""
         try:
+            # Normalizar query
+            query_normalized = query.lower().strip()
+
             # Analizar el tipo de consulta
-            query_type = self._classify_academic_query(query.lower())
+            query_type = self._classify_academic_query(query_normalized)
 
             logger.info(f"Consulta académica clasificada como: {query_type}")
 
@@ -81,15 +84,33 @@ TONO: Amigable, informativo y profesional. Usa emojis apropiados.
 
     def _classify_academic_query(self, query: str) -> str:
         """Clasifica el tipo de consulta académica"""
-        if any(word in query for word in ["horario", "clase", "cuándo tengo", "cuando tengo", "hora"]):
+        # Keywords más específicas y robustas
+        if any(word in query for word in [
+            "horario", "horarios", "clase", "clases",
+            "cuándo tengo", "cuando tengo", "a qué hora", "a que hora",
+            "hora curso", "que dia tengo", "qué día tengo"
+        ]):
             return "horarios"
-        elif any(word in query for word in ["inscripción", "inscripto", "materias", "cursando"]):
+        elif any(word in query for word in [
+            "inscripción", "inscripcion", "inscripto", "inscripta",
+            "materias", "materia", "cursando", "curso",
+            "en que estoy", "en qué estoy", "que estoy cursando"
+        ]):
             return "inscripciones"
-        elif any(word in query for word in ["profesor", "profesora", "docente", "quien da"]):
+        elif any(word in query for word in [
+            "profesor", "profesora", "profe", "docente",
+            "quien da", "quién da", "quien dicta", "quién dicta"
+        ]):
             return "profesores"
-        elif any(word in query for word in ["aula", "dónde", "donde", "ubicación", "salón"]):
+        elif any(word in query for word in [
+            "aula", "salon", "salón", "dónde", "donde",
+            "ubicación", "ubicacion", "en que aula", "en qué aula"
+        ]):
             return "aulas"
-        elif any(word in query for word in ["credito", "creditos", "vu", "vida universitaria"]):
+        elif any(word in query for word in [
+            "credito", "creditos", "crédito", "créditos",
+            "vu", "vida universitaria", "actividades"
+        ]):
             return "creditos_vu"
         else:
             return "general"

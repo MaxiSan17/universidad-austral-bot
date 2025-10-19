@@ -26,7 +26,10 @@ class CalendarAgent:
     async def process_query(self, query: str, user_info: Dict[str, Any], context: Dict[str, Any]) -> str:
         """Procesa una consulta sobre calendario y fechas"""
         try:
-            query_type = self._classify_calendar_query(query.lower())
+            # Normalizar query
+            query_normalized = query.lower().strip()
+
+            query_type = self._classify_calendar_query(query_normalized)
             logger.info(f"Consulta de calendario clasificada como: {query_type}")
 
             if query_type == "examenes":

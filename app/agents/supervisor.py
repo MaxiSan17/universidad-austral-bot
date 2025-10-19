@@ -396,8 +396,11 @@ NO agregues explicaciones, puntos, o texto adicional.
         try:
             if "academic" not in self.agents:
                 raise Exception("Agente académico no disponible")
-                
-            user_message = state["messages"][-1].content
+
+            # Obtener el último mensaje HUMANO (ignorar AIMessages intermedios)
+            human_messages = [msg for msg in state["messages"] if isinstance(msg, HumanMessage)]
+            user_message = human_messages[-1].content if human_messages else state["messages"][-1].content
+
             response = await self.agents["academic"].process_query(
                 query=user_message,
                 user_info=state["user_info"],
@@ -420,8 +423,11 @@ NO agregues explicaciones, puntos, o texto adicional.
         try:
             if "financial" not in self.agents:
                 raise Exception("Agente financiero no disponible")
-                
-            user_message = state["messages"][-1].content
+
+            # Obtener el último mensaje HUMANO (ignorar AIMessages intermedios)
+            human_messages = [msg for msg in state["messages"] if isinstance(msg, HumanMessage)]
+            user_message = human_messages[-1].content if human_messages else state["messages"][-1].content
+
             response = await self.agents["financial"].process_query(
                 query=user_message,
                 user_info=state["user_info"],
@@ -444,8 +450,11 @@ NO agregues explicaciones, puntos, o texto adicional.
         try:
             if "policies" not in self.agents:
                 raise Exception("Agente de políticas no disponible")
-                
-            user_message = state["messages"][-1].content
+
+            # Obtener el último mensaje HUMANO (ignorar AIMessages intermedios)
+            human_messages = [msg for msg in state["messages"] if isinstance(msg, HumanMessage)]
+            user_message = human_messages[-1].content if human_messages else state["messages"][-1].content
+
             response = await self.agents["policies"].process_query(
                 query=user_message,
                 user_info=state["user_info"],
@@ -468,8 +477,11 @@ NO agregues explicaciones, puntos, o texto adicional.
         try:
             if "calendar" not in self.agents:
                 raise Exception("Agente de calendario no disponible")
-                
-            user_message = state["messages"][-1].content
+
+            # Obtener el último mensaje HUMANO (ignorar AIMessages intermedios)
+            human_messages = [msg for msg in state["messages"] if isinstance(msg, HumanMessage)]
+            user_message = human_messages[-1].content if human_messages else state["messages"][-1].content
+
             response = await self.agents["calendar"].process_query(
                 query=user_message,
                 user_info=state["user_info"],
