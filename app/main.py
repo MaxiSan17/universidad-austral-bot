@@ -1,5 +1,24 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+# CRITICAL: Setup LangSmith ANTES de cualquier import de LangChain
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+# Configurar LangSmith explícitamente ANTES de imports
+os.environ["LANGCHAIN_TRACING_V2"] = os.getenv("LANGCHAIN_TRACING_V2", "false")
+os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY", "")
+os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGCHAIN_PROJECT", "universidad-austral-bot")
+os.environ["LANGCHAIN_ENDPOINT"] = os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")
+
+print(f"🔍 LangSmith Debug:")
+print(f"  LANGCHAIN_TRACING_V2: {os.environ.get('LANGCHAIN_TRACING_V2')}")
+print(f"  LANGCHAIN_API_KEY: {os.environ.get('LANGCHAIN_API_KEY', '')[:20]}...")
+print(f"  LANGCHAIN_PROJECT: {os.environ.get('LANGCHAIN_PROJECT')}")
+print(f"  LANGCHAIN_ENDPOINT: {os.environ.get('LANGCHAIN_ENDPOINT')}")
+
+# AHORA sí importar el resto
 from app.core.config import settings
 from app.integrations.webhook_handlers import webhook_router
 from app.utils.logger import setup_logging
@@ -32,13 +51,22 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "2.0.0",
-        "environment": settings.ENVIRONMENT
+        "environment": settings.ENVIRONMENT,
+        "langsmith_enabled": os.environ.get("LANGCHAIN_TRACING_V2") == "true"
     }
 
 @app.on_event("startup")
 async def startup_event():
     logger.info("Universidad Austral Bot iniciando...")
     logger.info(f"Ambiente: {settings.ENVIRONMENT}")
+    
+    # Verificar LangSmith
+    if os.environ.get("LANGCHAIN_TRACING_V2") == "true":
+        logger.info("✅ LangSmith tracing ACTIVO")
+        logger.info(f"   Proyecto: {os.environ.get('LANGCHAIN_PROJECT')}")
+        logger.info(f"   Endpoint: {os.environ.get('LANGCHAIN_ENDPOINT')}")
+    else:
+        logger.warning("⚠️ LangSmith tracing DESHABILITADO")
 
 @app.on_event("shutdown")
 async def shutdown_event():
