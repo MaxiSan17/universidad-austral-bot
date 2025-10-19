@@ -3,6 +3,7 @@ Agente de calendario usando Pydantic Models para mejor tipado y formateo
 """
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
+from difflib import SequenceMatcher
 from app.tools.calendar_tools import CalendarTools
 from app.models import (
     ExamenesResponse,
@@ -12,6 +13,7 @@ from app.models import (
     TipoExamen
 )
 from app.core import DIAS_SEMANA_ES, MESES_ES, EMOJIS
+from app.core.llm_factory import llm_factory
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -23,6 +25,111 @@ class CalendarAgent:
     def __init__(self):
         self.tools = CalendarTools()
 
+    def _fuzzy_match(self, word: str, keywords: list, threshold: float = 0.75) -> bool:
+        """
+        Verifica si una palabra coincide con alguna keyword usando fuzzy matching.
+
+        Args:
+            word: Palabra a verificar
+            keywords: Lista de keywords a comparar
+            threshold: Umbral de similitud (0.0 a 1.0, default 0.75)
+
+        Returns:
+            True si encuentra match con similitud >= threshold
+        """
+        word_clean = word.lower().strip()
+
+        # Filtrar palabras muy cortas que pueden dar falsos positivos
+        # Si la palabra tiene menos de 4 caracteres, requerir match exacto
+        if len(word_clean) < 4:
+            return word_clean in [kw.lower() for kw in keywords]
+
+        # Para palabras de 4-5 caracteres, usar threshold más estricto
+        # para evitar falsos positivos como "hola" ≈ "hora"
+        effective_threshold = threshold
+        if len(word_clean) <= 5:
+            effective_threshold = 0.85  # Más estricto para palabras cortas
+
+        for keyword in keywords:
+            # Calcular similitud usando SequenceMatcher
+            similarity = SequenceMatcher(None, word_clean, keyword.lower()).ratio()
+
+            if similarity >= effective_threshold:
+                logger.debug(f"  Fuzzy match: '{word}' ≈ '{keyword}' (sim: {similarity:.2f})")
+                return True
+
+        return False
+
+    def _check_keywords_fuzzy(self, query: str, keywords: list, threshold: float = 0.75) -> bool:
+        """
+        Verifica si alguna palabra del query coincide con las keywords usando fuzzy matching.
+
+        Args:
+            query: Query del usuario
+            keywords: Lista de keywords a buscar
+            threshold: Umbral de similitud
+
+        Returns:
+            True si encuentra al menos un match
+        """
+        words = query.split()
+
+        for word in words:
+            if self._fuzzy_match(word, keywords, threshold):
+                return True
+
+        return False
+
+    async def _classify_with_llm(self, query: str) -> str:
+        """
+        Usa LLM para clasificar la consulta cuando fuzzy matching no funciona.
+
+        Args:
+            query: Query del usuario
+
+        Returns:
+            Tipo de consulta: "examenes", "eventos", "feriados", "general"
+        """
+        try:
+            llm = llm_factory.create(temperature=0.0)
+
+            prompt = f"""Eres un clasificador de consultas sobre calendario académico.
+
+Analiza la siguiente consulta y determina de qué tipo es.
+
+CONSULTA DEL USUARIO:
+"{query}"
+
+TIPOS POSIBLES:
+- examenes: Consultas sobre fechas de exámenes (parciales, finales, recuperatorios)
+- eventos: Consultas sobre eventos del calendario académico
+- feriados: Consultas sobre feriados o días sin clases
+- general: Consulta ambigua o que no encaja en las anteriores
+
+INSTRUCCIONES:
+1. Ignora errores ortográficos
+2. Considera sinónimos (ej: "prueba" = "examen", "descanso" = "feriado")
+3. Responde con UNA SOLA PALABRA (el tipo)
+4. Si no estás seguro, responde "general"
+
+RESPUESTA (una palabra):"""
+
+            response = await llm.ainvoke(prompt)
+            classification = response.content.strip().lower()
+
+            # Validar que la respuesta sea válida
+            valid_types = ["examenes", "eventos", "feriados", "general"]
+            if classification in valid_types:
+                logger.info(f"🤖 LLM clasificó como: {classification}")
+                return classification
+            else:
+                logger.warning(f"⚠️ LLM retornó tipo inválido: {classification}, usando 'general'")
+                return "general"
+
+        except Exception as e:
+            logger.error(f"Error en clasificación con LLM: {e}")
+            return "general"
+
     async def process_query(self, query: str, user_info: Dict[str, Any], context: Dict[str, Any]) -> str:
         """Procesa una consulta sobre calendario y fechas"""
         try:
@@ -30,6 +137,18 @@ class CalendarAgent:
             query_normalized = query.lower().strip()
 
             query_type = self._classify_calendar_query(query_normalized)
+
+            # Si es "general", intentar con LLM antes de mostrar menú
+            if query_type == "general":
+                logger.info("🤖 Usando LLM fallback para clasificación...")
+                query_type = await self._classify_with_llm(query)
+
+                # Si el LLM también dice "general", entonces realmente es ambiguo
+                if query_type == "general":
+                    logger.info("✅ Confirmado como consulta general (ambigua)")
+                else:
+                    logger.info(f"✅ LLM reclasificó como: {query_type}")
+
             logger.info(f"Consulta de calendario clasificada como: {query_type}")
 
             if query_type == "examenes":
@@ -53,18 +172,65 @@ class CalendarAgent:
         return without_accents.lower()
 
     def _classify_calendar_query(self, query: str) -> str:
-        """Clasifica el tipo de consulta de calendario"""
-        query_norm = self._normalize_text(query)
+        """
+        Clasifica el tipo de consulta de calendario con tolerancia a typos.
 
-        # Verificar exámenes PRIMERO
-        if any(word in query_norm for word in ["examen", "examenes", "parcial", "final", "recuperatorio", "prueba"]):
+        Estrategia de tres niveles:
+        1. Match exacto con keywords (más rápido)
+        2. Fuzzy matching para typos (tolerante)
+        3. LLM fallback en process_query si es "general"
+
+        Args:
+            query: Query normalizado (lowercase)
+
+        Returns:
+            Tipo de consulta
+        """
+        # Definir keywords por categoría
+        examenes_kw = [
+            "examen", "examenes", "parcial", "parciales",
+            "final", "finales", "recuperatorio", "evaluacion", "prueba"
+        ]
+
+        feriados_kw = [
+            "feriado", "feriados", "no hay clases", "descanso", "receso"
+        ]
+
+        eventos_kw = [
+            "evento", "calendario", "fecha", "cuando", "cuándo"
+        ]
+
+        # NIVEL 1: Match exacto (más rápido)
+        if any(kw in query for kw in examenes_kw):
+            logger.debug("✅ Match exacto: examenes")
             return "examenes"
-        elif any(word in query_norm for word in ["feriado", "feriados", "no hay clases"]):
+
+        if any(kw in query for kw in feriados_kw):
+            logger.debug("✅ Match exacto: feriados")
             return "feriados"
-        elif any(word in query_norm for word in ["evento", "calendario", "fecha"]):
+
+        if any(kw in query for kw in eventos_kw):
+            logger.debug("✅ Match exacto: eventos")
             return "eventos"
-        else:
-            return "general"
+
+        # NIVEL 2: Fuzzy matching (tolerante a typos)
+        logger.debug("🔍 No hubo match exacto, intentando fuzzy matching...")
+
+        if self._check_keywords_fuzzy(query, examenes_kw, threshold=0.75):
+            logger.debug("✅ Fuzzy match: examenes")
+            return "examenes"
+
+        if self._check_keywords_fuzzy(query, feriados_kw, threshold=0.75):
+            logger.debug("✅ Fuzzy match: feriados")
+            return "feriados"
+
+        if self._check_keywords_fuzzy(query, eventos_kw, threshold=0.75):
+            logger.debug("✅ Fuzzy match: eventos")
+            return "eventos"
+
+        # NIVEL 3: Retornar "general" (se usará LLM en process_query)
+        logger.debug("❓ No hubo fuzzy match, marcando como 'general' para LLM fallback")
+        return "general"
 
     async def _handle_exams(self, query: str, user_info: Dict[str, Any]) -> str:
         """Maneja consultas sobre exámenes usando ExamenesResponse"""

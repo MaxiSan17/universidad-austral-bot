@@ -2,6 +2,7 @@
 Agente académico usando Pydantic Models para mejor tipado y formateo
 """
 from typing import Dict, Any, Optional
+from difflib import SequenceMatcher
 from app.tools.academic_tools import AcademicTools
 from app.models import (
     HorariosResponse,
@@ -12,6 +13,7 @@ from app.models import (
     Modalidad
 )
 from app.core import DIAS_SEMANA_ES, EMOJIS
+from app.core.llm_factory import llm_factory
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -23,6 +25,113 @@ class AcademicAgent:
     def __init__(self):
         self.tools = AcademicTools()
         self.system_prompt = self._get_system_prompt()
+
+    def _fuzzy_match(self, word: str, keywords: list, threshold: float = 0.75) -> bool:
+        """
+        Verifica si una palabra coincide con alguna keyword usando fuzzy matching.
+
+        Args:
+            word: Palabra a verificar
+            keywords: Lista de keywords a comparar
+            threshold: Umbral de similitud (0.0 a 1.0, default 0.75)
+
+        Returns:
+            True si encuentra match con similitud >= threshold
+        """
+        word_clean = word.lower().strip()
+
+        # Filtrar palabras muy cortas que pueden dar falsos positivos
+        # Si la palabra tiene menos de 4 caracteres, requerir match exacto
+        if len(word_clean) < 4:
+            return word_clean in [kw.lower() for kw in keywords]
+
+        # Para palabras de 4-5 caracteres, usar threshold más estricto
+        # para evitar falsos positivos como "hola" ≈ "hora"
+        effective_threshold = threshold
+        if len(word_clean) <= 5:
+            effective_threshold = 0.85  # Más estricto para palabras cortas
+
+        for keyword in keywords:
+            # Calcular similitud usando SequenceMatcher
+            similarity = SequenceMatcher(None, word_clean, keyword.lower()).ratio()
+
+            if similarity >= effective_threshold:
+                logger.debug(f"  Fuzzy match: '{word}' ≈ '{keyword}' (sim: {similarity:.2f})")
+                return True
+
+        return False
+
+    def _check_keywords_fuzzy(self, query: str, keywords: list, threshold: float = 0.75) -> bool:
+        """
+        Verifica si alguna palabra del query coincide con las keywords usando fuzzy matching.
+
+        Args:
+            query: Query del usuario
+            keywords: Lista de keywords a buscar
+            threshold: Umbral de similitud
+
+        Returns:
+            True si encuentra al menos un match
+        """
+        words = query.split()
+
+        for word in words:
+            if self._fuzzy_match(word, keywords, threshold):
+                return True
+
+        return False
+
+    async def _classify_with_llm(self, query: str) -> str:
+        """
+        Usa LLM para clasificar la consulta cuando fuzzy matching no funciona.
+
+        Args:
+            query: Query del usuario
+
+        Returns:
+            Tipo de consulta: "horarios", "inscripciones", "profesores", "aulas", "creditos_vu", "general"
+        """
+        try:
+            llm = llm_factory.create(temperature=0.0)
+
+            prompt = f"""Eres un clasificador de consultas académicas universitarias.
+
+Analiza la siguiente consulta y determina de qué tipo es.
+
+CONSULTA DEL USUARIO:
+"{query}"
+
+TIPOS POSIBLES:
+- horarios: Consultas sobre horarios de clase, cuándo tiene clase, a qué hora es una materia
+- inscripciones: Consultas sobre materias inscriptas, en qué está cursando
+- profesores: Consultas sobre quién es el profesor de una materia
+- aulas: Consultas sobre dónde es una clase, ubicación de aulas
+- creditos_vu: Consultas sobre créditos de Vida Universitaria
+- general: Consulta ambigua o que no encaja en las anteriores
+
+INSTRUCCIONES:
+1. Ignora errores ortográficos
+2. Considera sinónimos (ej: "docente" = "profesor", "clase" = "cursada")
+3. Responde con UNA SOLA PALABRA (el tipo)
+4. Si no estás seguro, responde "general"
+
+RESPUESTA (una palabra):"""
+
+            response = await llm.ainvoke(prompt)
+            classification = response.content.strip().lower()
+
+            # Validar que la respuesta sea válida
+            valid_types = ["horarios", "inscripciones", "profesores", "aulas", "creditos_vu", "general"]
+            if classification in valid_types:
+                logger.info(f"🤖 LLM clasificó como: {classification}")
+                return classification
+            else:
+                logger.warning(f"⚠️ LLM retornó tipo inválido: {classification}, usando 'general'")
+                return "general"
+
+        except Exception as e:
+            logger.error(f"Error en clasificación con LLM: {e}")
+            return "general"
 
     def _get_system_prompt(self) -> str:
         """Define el prompt del sistema para el agente académico"""
@@ -62,6 +171,17 @@ TONO: Amigable, informativo y profesional. Usa emojis apropiados.
             # Analizar el tipo de consulta
             query_type = self._classify_academic_query(query_normalized)
 
+            # Si es "general", intentar con LLM antes de mostrar menú
+            if query_type == "general":
+                logger.info("🤖 Usando LLM fallback para clasificación...")
+                query_type = await self._classify_with_llm(query)
+
+                # Si el LLM también dice "general", entonces realmente es ambiguo
+                if query_type == "general":
+                    logger.info("✅ Confirmado como consulta general (ambigua)")
+                else:
+                    logger.info(f"✅ LLM reclasificó como: {query_type}")
+
             logger.info(f"Consulta académica clasificada como: {query_type}")
 
             # Procesar según el tipo
@@ -83,37 +203,93 @@ TONO: Amigable, informativo y profesional. Usa emojis apropiados.
             return self._get_error_response(user_info)
 
     def _classify_academic_query(self, query: str) -> str:
-        """Clasifica el tipo de consulta académica"""
-        # Keywords más específicas y robustas
-        if any(word in query for word in [
+        """
+        Clasifica el tipo de consulta académica con tolerancia a typos.
+
+        Estrategia de tres niveles:
+        1. Match exacto con keywords (más rápido)
+        2. Fuzzy matching para typos (tolerante)
+        3. LLM fallback en process_query si es "general"
+
+        Args:
+            query: Query normalizado (lowercase)
+
+        Returns:
+            Tipo de consulta
+        """
+        # Definir keywords por categoría
+        horarios_kw = [
             "horario", "horarios", "clase", "clases",
-            "cuándo tengo", "cuando tengo", "a qué hora", "a que hora",
-            "hora curso", "que dia tengo", "qué día tengo"
-        ]):
-            return "horarios"
-        elif any(word in query for word in [
+            "cuando", "cuándo", "hora", "tengo"
+        ]
+
+        inscripciones_kw = [
             "inscripción", "inscripcion", "inscripto", "inscripta",
-            "materias", "materia", "cursando", "curso",
-            "en que estoy", "en qué estoy", "que estoy cursando"
-        ]):
-            return "inscripciones"
-        elif any(word in query for word in [
+            "materias", "materia", "cursando", "curso"
+        ]
+
+        profesores_kw = [
             "profesor", "profesora", "profe", "docente",
-            "quien da", "quién da", "quien dicta", "quién dicta"
-        ]):
-            return "profesores"
-        elif any(word in query for word in [
-            "aula", "salon", "salón", "dónde", "donde",
-            "ubicación", "ubicacion", "en que aula", "en qué aula"
-        ]):
-            return "aulas"
-        elif any(word in query for word in [
+            "quien", "quién", "dicta"
+        ]
+
+        aulas_kw = [
+            "aula", "salon", "salón", "donde", "dónde",
+            "ubicación", "ubicacion"
+        ]
+
+        creditos_kw = [
             "credito", "creditos", "crédito", "créditos",
             "vu", "vida universitaria", "actividades"
-        ]):
+        ]
+
+        # NIVEL 1: Match exacto (más rápido)
+        if any(kw in query for kw in horarios_kw):
+            logger.debug("✅ Match exacto: horarios")
+            return "horarios"
+
+        if any(kw in query for kw in inscripciones_kw):
+            logger.debug("✅ Match exacto: inscripciones")
+            return "inscripciones"
+
+        if any(kw in query for kw in profesores_kw):
+            logger.debug("✅ Match exacto: profesores")
+            return "profesores"
+
+        if any(kw in query for kw in aulas_kw):
+            logger.debug("✅ Match exacto: aulas")
+            return "aulas"
+
+        if any(kw in query for kw in creditos_kw):
+            logger.debug("✅ Match exacto: creditos_vu")
             return "creditos_vu"
-        else:
-            return "general"
+
+        # NIVEL 2: Fuzzy matching (tolerante a typos)
+        logger.debug("🔍 No hubo match exacto, intentando fuzzy matching...")
+
+        if self._check_keywords_fuzzy(query, horarios_kw, threshold=0.75):
+            logger.debug("✅ Fuzzy match: horarios")
+            return "horarios"
+
+        if self._check_keywords_fuzzy(query, inscripciones_kw, threshold=0.75):
+            logger.debug("✅ Fuzzy match: inscripciones")
+            return "inscripciones"
+
+        if self._check_keywords_fuzzy(query, profesores_kw, threshold=0.75):
+            logger.debug("✅ Fuzzy match: profesores")
+            return "profesores"
+
+        if self._check_keywords_fuzzy(query, aulas_kw, threshold=0.75):
+            logger.debug("✅ Fuzzy match: aulas")
+            return "aulas"
+
+        if self._check_keywords_fuzzy(query, creditos_kw, threshold=0.75):
+            logger.debug("✅ Fuzzy match: creditos_vu")
+            return "creditos_vu"
+
+        # NIVEL 3: Retornar "general" (se usará LLM en process_query)
+        logger.debug("❓ No hubo fuzzy match, marcando como 'general' para LLM fallback")
+        return "general"
 
     async def _handle_schedules(self, query: str, user_info: Dict[str, Any]) -> str:
         """Maneja consultas sobre horarios usando HorariosResponse"""
