@@ -11,7 +11,14 @@ class PoliciesAgent:
         self.tools = PoliciesTools()
 
     async def process_query(self, query: str, user_info: Dict[str, Any], context: Dict[str, Any]) -> str:
-        """Procesa una consulta sobre políticas y reglamentos"""
+        """
+        Procesa una consulta sobre políticas y reglamentos usando búsqueda vectorial
+
+        Este método ahora usa el nuevo sistema de búsqueda semántica que:
+        1. Vectoriza la consulta del usuario
+        2. Busca documentos similares en Supabase
+        3. Genera respuesta contextual con LLM
+        """
         try:
             # Normalizar query
             query_normalized = query.lower().strip()
@@ -19,20 +26,51 @@ class PoliciesAgent:
             query_type = self._classify_policies_query(query_normalized)
             logger.info(f"Consulta de políticas clasificada como: {query_type}")
 
-            if query_type == "syllabus":
-                return await self._handle_syllabus(query, user_info)
-            elif query_type == "reglamentos":
-                return await self._handle_regulations(query, user_info)
-            elif query_type == "procedimientos":
-                return await self._handle_procedures(query, user_info)
-            elif query_type == "becas":
-                return await self._handle_scholarships(user_info)
+            # Usar búsqueda vectorial como método principal
+            params = {
+                'consulta': query,
+                'alumno_id': user_info.get('id'),
+                'tipo': query_type if query_type != 'general' else None
+            }
+
+            # Extraer materia si está en la consulta
+            materia = self._extract_subject_from_query(query)
+            if materia:
+                params['materia'] = materia
+
+            logger.info(f"Llamando búsqueda vectorial con params: {params}")
+
+            # Llamar a búsqueda vectorial
+            result = await self.tools.consultar_politicas(params)
+
+            if result and result.get('respuesta'):
+                return self._format_vector_search_response(result, user_info['nombre'])
+            elif result and result.get('error'):
+                logger.warning(f"Error en búsqueda vectorial: {result['error']}")
+                # Fallback a métodos legacy si falla
+                return await self._fallback_to_legacy(query, query_type, user_info)
             else:
-                return await self._handle_general_policies(user_info)
+                # Fallback a métodos legacy
+                return await self._fallback_to_legacy(query, query_type, user_info)
 
         except Exception as e:
-            logger.error(f"Error en agente de políticas: {e}")
+            logger.error(f"Error en agente de políticas: {e}", exc_info=True)
             return self._get_error_response(user_info)
+
+    async def _fallback_to_legacy(self, query: str, query_type: str, user_info: Dict[str, Any]) -> str:
+        """Fallback a métodos legacy si falla la búsqueda vectorial"""
+        logger.info(f"Usando fallback legacy para query_type: {query_type}")
+
+        if query_type == "syllabus":
+            return await self._handle_syllabus(query, user_info)
+        elif query_type == "reglamentos":
+            return await self._handle_regulations(query, user_info)
+        elif query_type == "procedimientos":
+            return await self._handle_procedures(query, user_info)
+        elif query_type == "becas":
+            return await self._handle_scholarships(user_info)
+        else:
+            return await self._handle_general_policies(user_info)
 
     def _classify_policies_query(self, query: str) -> str:
         """Clasifica el tipo de consulta de políticas"""
@@ -324,6 +362,39 @@ Puedo ayudarte con:
                 response += f"• Vigencia: {beca['vigencia']}\n\n"
 
         response += "¿Querés información específica sobre alguna beca? 😊"
+        return response
+
+    def _format_vector_search_response(self, data: Dict[str, Any], nombre: str) -> str:
+        """
+        Formatea la respuesta de búsqueda vectorial
+
+        La respuesta ya viene procesada por el LLM de n8n, solo agregamos contexto
+        """
+        response = f"¡Hola {nombre}! 📚\n\n"
+
+        # La respuesta principal ya está formateada por el LLM
+        response += data['respuesta']
+
+        # Agregar fuentes si están disponibles (para transparencia)
+        if data.get('fuentes') and len(data['fuentes']) > 0:
+            response += "\n\n📖 **Fuentes consultadas:**\n"
+            for fuente in data['fuentes'][:3]:  # Máximo 3 fuentes
+                doc_nombre = fuente.get('documento', 'Documento')
+                if fuente.get('seccion'):
+                    response += f"• {doc_nombre} - {fuente['seccion']}\n"
+                else:
+                    response += f"• {doc_nombre}\n"
+
+                # Agregar URL si está disponible
+                if fuente.get('url'):
+                    response += f"  🔗 {fuente['url']}\n"
+
+        # Agregar confidence score si es bajo (para transparencia)
+        confidence = data.get('confidence', 1.0)
+        if confidence < 0.7:
+            response += f"\n\n⚠️ *Nota: Esta información tiene una confianza del {int(confidence * 100)}%. Si necesitás confirmación, consultá con la secretaría académica.*"
+
+        response += "\n\n¿Necesitás más información? 😊"
         return response
 
     def _get_mock_syllabus_response(self, materia: str, nombre: str) -> str:

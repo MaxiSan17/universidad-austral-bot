@@ -53,3 +53,6 @@ logs/
 
 # Claude settings
 .claude/
+
+# MCP configuration (puede contener credenciales)
+.mcp.json

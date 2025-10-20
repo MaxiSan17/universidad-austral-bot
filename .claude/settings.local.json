@@ -12,5 +12,10 @@
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "enabledMcpjsonServers": [
+    "filesystem",
+    "git",
+    "memory"
+  ]
 }

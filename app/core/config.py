@@ -148,7 +148,7 @@ class Settings(BaseSettings):
     enable_academic_tools: bool = True
     enable_calendar_tools: bool = True
     enable_financial_tools: bool = False
-    enable_policies_tools: bool = False
+    enable_policies_tools: bool = True  # ✅ Habilitado - búsqueda vectorial en Supabase
     
     # ==========================================
     # UNIVERSIDAD ESPECÍFICO

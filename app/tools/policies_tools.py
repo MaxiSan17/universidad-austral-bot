@@ -1,155 +1,224 @@
 from typing import Dict, Any, Optional
-from app.tools.n8n_manager import N8NManager
+import httpx
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 class PoliciesTools:
-    """Herramientas de políticas y reglamentos que se conectan con n8n webhooks"""
+    """
+    Herramientas de políticas y reglamentos con búsqueda vectorial en Supabase
+
+    Este módulo se conecta a un flujo n8n que:
+    1. Vectoriza la consulta del usuario
+    2. Busca por similitud semántica en la base vectorizada de Supabase
+    3. Procesa la respuesta con un LLM integrado
+    4. Retorna la respuesta final formateada
+    """
 
     def __init__(self):
-        self.n8n_manager = N8NManager()
+        # Webhook específico con LLM + búsqueda vectorial integrada
+        self.webhook_url = "https://n8n.tucbbs.com.ar/webhook/a4c5728a-9853-424d-bb8d-44d2ec68d87e"
+        self.timeout = 60.0  # 60s porque incluye vectorización + LLM
 
-    async def buscar_syllabus(self, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def consultar_politicas(self, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
-        Busca información específica en el syllabus de una materia
+        Consulta políticas, reglamentos y syllabi mediante búsqueda vectorial
 
-        Webhook n8n: {N8N_BASE_URL}/policies/syllabus
+        Este método envía la consulta del usuario a n8n, que:
+        - Vectoriza la pregunta usando embeddings
+        - Busca documentos similares en Supabase (vector similarity search)
+        - Procesa los resultados con un LLM para generar respuesta contextual
+        - Retorna respuesta final con fuentes
 
-        Parámetros esperados por n8n:
-        - materia: Nombre de la materia
-        - consulta_especifica: (opcional) Consulta específica sobre el syllabus
+        Parámetros esperados:
+        - consulta: Pregunta del usuario (requerido)
+        - alumno_id: (opcional) ID del alumno para contexto personalizado
+        - materia: (opcional) Filtrar por materia específica
+        - tipo: (opcional) Tipo de documento ("syllabus", "reglamento", "procedimiento")
 
         Respuesta esperada de n8n:
         {
-            "materia": "Nativa Digital",
-            "contenido": {
-                "objetivos": "Desarrollar aplicaciones web modernas...",
-                "evaluacion": "2 parciales (70%) + Trabajos prácticos (30%)",
-                "bibliografia": [
-                    "JavaScript: The Good Parts - Douglas Crockford",
-                    "React Documentation"
-                ],
-                "temas": [
-                    "Introducción a React",
-                    "Estado y Props",
-                    "Hooks"
-                ]
-            },
-            "url_completo": "https://syllabus.austral.edu.ar/nativa-digital"
+            "respuesta": "Texto de respuesta generado por LLM con contexto",
+            "fuentes": [
+                {
+                    "documento": "Reglamento Académico 2025",
+                    "seccion": "Artículo 15 - Asistencias",
+                    "similitud": 0.92,
+                    "url": "https://docs.austral.edu.ar/reglamento-2025"
+                }
+            ],
+            "confidence": 0.89,
+            "documentos_encontrados": 3
         }
+
+        Ejemplos de consultas:
+        - "¿Cuál es la asistencia mínima requerida?"
+        - "¿Qué temas se ven en el syllabus de Nativa Digital?"
+        - "¿Cómo solicito un certificado de alumno regular?"
         """
         try:
-            webhook_path = "policies/syllabus"
-            return await self.n8n_manager.call_webhook(webhook_path, params)
+            # Validar que venga la consulta
+            if not params.get('consulta'):
+                logger.error("Falta parámetro 'consulta' en consultar_politicas")
+                return {
+                    "error": "Parámetro 'consulta' es requerido",
+                    "respuesta": "No se pudo procesar la consulta porque falta el texto de la pregunta."
+                }
+
+            logger.info(f"🔍 Consultando políticas con búsqueda vectorial: {params.get('consulta')[:100]}...")
+
+            # Construir payload para n8n
+            payload = {
+                "consulta": params.get('consulta'),
+                "alumno_id": params.get('alumno_id'),
+                "materia": params.get('materia'),
+                "tipo": params.get('tipo'),
+                "timestamp": str(int(__import__('time').time()))
+            }
+
+            # Headers
+            headers = {
+                "Content-Type": "application/json",
+                "X-Source": "universidad-austral-bot"
+            }
+
+            # Llamada HTTP a n8n con timeout extendido
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    self.webhook_url,
+                    json=payload,
+                    headers=headers
+                )
+
+                logger.info(f"Status code de n8n (políticas): {response.status_code}")
+
+                if response.status_code == 200:
+                    result = response.json()
+                    logger.info(f"✅ Búsqueda vectorial exitosa - {result.get('documentos_encontrados', 0)} docs encontrados")
+                    return result
+                else:
+                    logger.error(f"Error en webhook políticas: {response.status_code} - {response.text}")
+                    return {
+                        "error": f"Error del servidor: {response.status_code}",
+                        "respuesta": "No pude procesar tu consulta en este momento. Por favor, intenta de nuevo."
+                    }
+
+        except httpx.TimeoutException:
+            logger.error(f"Timeout en consultar_politicas (>{self.timeout}s)")
+            return {
+                "error": "timeout",
+                "respuesta": "La búsqueda está tardando más de lo esperado. Por favor, intenta con una consulta más específica."
+            }
         except Exception as e:
-            logger.error(f"Error llamando webhook buscar_syllabus: {e}")
+            logger.error(f"Error en consultar_politicas: {e}", exc_info=True)
+            return {
+                "error": str(e),
+                "respuesta": "Ocurrió un error al procesar tu consulta. Por favor, intenta de nuevo."
+            }
+
+    # ==========================================
+    # MÉTODOS LEGACY (mantener por compatibilidad)
+    # ==========================================
+
+    async def buscar_syllabus(self, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        LEGACY: Usa consultar_politicas() con tipo='syllabus'
+
+        Busca información específica en el syllabus de una materia
+        """
+        try:
+            logger.info(f"Redirigiendo buscar_syllabus a consultar_politicas")
+
+            # Construir consulta para búsqueda vectorial
+            materia = params.get('materia', '')
+            consulta_especifica = params.get('consulta_especifica', '')
+
+            consulta = f"Buscar información del syllabus de {materia}"
+            if consulta_especifica:
+                consulta += f": {consulta_especifica}"
+
+            return await self.consultar_politicas({
+                'consulta': consulta,
+                'materia': materia,
+                'tipo': 'syllabus',
+                'alumno_id': params.get('alumno_id')
+            })
+
+        except Exception as e:
+            logger.error(f"Error en buscar_syllabus: {e}")
             return None
 
     async def consultar_reglamento(self, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
+        LEGACY: Usa consultar_politicas() con tipo='reglamento'
+
         Consulta reglamentos académicos
-
-        Webhook n8n: {N8N_BASE_URL}/policies/reglamentos
-
-        Parámetros esperados por n8n:
-        - tipo_reglamento: "academico" | "evaluacion" | "asistencia" | "general"
-        - consulta_especifica: (opcional) Consulta específica
-
-        Respuesta esperada de n8n:
-        {
-            "tipo": "academico",
-            "seccion": "Evaluaciones",
-            "contenido": "Los exámenes parciales...",
-            "articulos": [
-                {
-                    "numero": "Art. 15",
-                    "texto": "La asistencia mínima requerida es del 75%"
-                }
-            ],
-            "url_completo": "https://reglamentos.austral.edu.ar/academico"
-        }
         """
         try:
-            webhook_path = "policies/reglamentos"
-            return await self.n8n_manager.call_webhook(webhook_path, params)
+            logger.info(f"Redirigiendo consultar_reglamento a consultar_politicas")
+
+            tipo_reglamento = params.get('tipo_reglamento', 'general')
+            consulta_especifica = params.get('consulta_especifica', '')
+
+            consulta = f"Buscar en reglamento {tipo_reglamento}"
+            if consulta_especifica:
+                consulta += f": {consulta_especifica}"
+
+            return await self.consultar_politicas({
+                'consulta': consulta,
+                'tipo': 'reglamento',
+                'alumno_id': params.get('alumno_id')
+            })
+
         except Exception as e:
-            logger.error(f"Error llamando webhook consultar_reglamento: {e}")
+            logger.error(f"Error en consultar_reglamento: {e}")
             return None
 
     async def buscar_procedimiento(self, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
+        LEGACY: Usa consultar_politicas() con tipo='procedimiento'
+
         Busca procedimientos administrativos
-
-        Webhook n8n: {N8N_BASE_URL}/policies/procedimientos
-
-        Parámetros esperados por n8n:
-        - tipo_procedimiento: "inscripcion" | "certificados" | "cambio_materia" | "baja"
-        - detalles: (opcional) Detalles específicos del procedimiento
-
-        Respuesta esperada de n8n:
-        {
-            "procedimiento": "Solicitud de Certificado",
-            "pasos": [
-                "1. Completar formulario online",
-                "2. Adjuntar documentación requerida",
-                "3. Pagar arancel correspondiente",
-                "4. Esperar confirmación por email"
-            ],
-            "requisitos": [
-                "Estar al día con las cuotas",
-                "Tener materias aprobadas"
-            ],
-            "tiempo_estimado": "5-7 días hábiles",
-            "costo": "$25000",
-            "formulario_url": "https://formularios.austral.edu.ar/certificados"
-        }
         """
         try:
-            webhook_path = "policies/procedimientos"
-            return await self.n8n_manager.call_webhook(webhook_path, params)
+            logger.info(f"Redirigiendo buscar_procedimiento a consultar_politicas")
+
+            tipo_procedimiento = params.get('tipo_procedimiento', '')
+            detalles = params.get('detalles', '')
+
+            consulta = f"Buscar procedimiento: {tipo_procedimiento}"
+            if detalles:
+                consulta += f". {detalles}"
+
+            return await self.consultar_politicas({
+                'consulta': consulta,
+                'tipo': 'procedimiento',
+                'alumno_id': params.get('alumno_id')
+            })
+
         except Exception as e:
-            logger.error(f"Error llamando webhook buscar_procedimiento: {e}")
+            logger.error(f"Error en buscar_procedimiento: {e}")
             return None
 
     async def consultar_becas(self, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
+        LEGACY: Usa consultar_politicas() con tipo='becas'
+
         Consulta información sobre becas disponibles
-
-        Webhook n8n: {N8N_BASE_URL}/policies/becas
-
-        Parámetros esperados por n8n:
-        - tipo_beca: (opcional) "merito" | "necesidad" | "deporte" | "todas"
-        - alumno_id: (opcional) ID del alumno para consultas personalizadas
-
-        Respuesta esperada de n8n:
-        {
-            "becas_disponibles": [
-                {
-                    "nombre": "Beca por Mérito Académico",
-                    "descripcion": "Para estudiantes con promedio superior a 8.5",
-                    "porcentaje_descuento": 50,
-                    "requisitos": [
-                        "Promedio mínimo 8.5",
-                        "Materias al día"
-                    ],
-                    "fecha_limite": "2024-12-01",
-                    "estado_postulacion": "Abierta"
-                }
-            ],
-            "becas_del_alumno": [
-                {
-                    "nombre": "Beca Deportiva",
-                    "estado": "Activa",
-                    "descuento": 30,
-                    "vigencia": "2024-12-31"
-                }
-            ]
-        }
         """
         try:
-            webhook_path = "policies/becas"
-            return await self.n8n_manager.call_webhook(webhook_path, params)
+            logger.info(f"Redirigiendo consultar_becas a consultar_politicas")
+
+            tipo_beca = params.get('tipo_beca', 'todas')
+
+            consulta = f"Información sobre becas: {tipo_beca}"
+
+            return await self.consultar_politicas({
+                'consulta': consulta,
+                'tipo': 'becas',
+                'alumno_id': params.get('alumno_id')
+            })
+
         except Exception as e:
-            logger.error(f"Error llamando webhook consultar_becas: {e}")
+            logger.error(f"Error en consultar_becas: {e}")
             return None
