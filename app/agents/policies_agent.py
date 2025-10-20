@@ -44,14 +44,29 @@ class PoliciesAgent:
             result = await self.tools.consultar_politicas(params)
 
             if result and result.get('respuesta'):
+                # Si hay error pero también respuesta, usar la respuesta
+                if result.get('error'):
+                    logger.warning(f"⚠️ Búsqueda vectorial retornó error Y respuesta: {result['error']}")
+
                 return self._format_vector_search_response(result, user_info['nombre'])
+
             elif result and result.get('error'):
-                logger.warning(f"Error en búsqueda vectorial: {result['error']}")
-                # Fallback a métodos legacy si falla
-                return await self._fallback_to_legacy(query, query_type, user_info)
+                # Solo error, sin respuesta válida
+                logger.error(f"❌ Error en búsqueda vectorial: {result['error']}")
+
+                # NO hacer fallback para evitar loops - retornar error amigable
+                return f"""¡Hola {user_info['nombre']}! 😅
+
+Hubo un problema al buscar esa información en nuestra base de conocimientos.
+
+{result.get('respuesta', 'Por favor, intentá reformular tu pregunta o contactá a la secretaría académica.')}
+
+¿Te puedo ayudar con algo más? 😊"""
+
             else:
-                # Fallback a métodos legacy
-                return await self._fallback_to_legacy(query, query_type, user_info)
+                # Sin resultado válido
+                logger.error("❌ Búsqueda vectorial sin resultado válido")
+                return self._get_error_response(user_info)
 
         except Exception as e:
             logger.error(f"Error en agente de políticas: {e}", exc_info=True)

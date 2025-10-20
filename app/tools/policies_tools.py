@@ -91,11 +91,49 @@ class PoliciesTools:
                 )
 
                 logger.info(f"Status code de n8n (políticas): {response.status_code}")
+                logger.debug(f"Response body completo: {response.text[:500]}")
 
                 if response.status_code == 200:
-                    result = response.json()
-                    logger.info(f"✅ Búsqueda vectorial exitosa - {result.get('documentos_encontrados', 0)} docs encontrados")
-                    return result
+                    try:
+                        # n8n puede retornar array o objeto, manejar ambos casos
+                        result = response.json()
+
+                        # Si es un array, tomar el primer elemento
+                        if isinstance(result, list):
+                            if len(result) > 0:
+                                result = result[0]
+                                logger.info(f"📦 n8n retornó array, usando primer elemento")
+                            else:
+                                logger.error("❌ n8n retornó array vacío")
+                                return {
+                                    "error": "empty_array",
+                                    "respuesta": "No encontré información relevante sobre tu consulta. ¿Podés reformular la pregunta?"
+                                }
+
+                        # Normalizar estructura: n8n retorna {"output": "..."}
+                        # pero necesitamos {"respuesta": "..."}
+                        if 'output' in result and 'respuesta' not in result:
+                            logger.info("📝 Normalizando estructura: output → respuesta")
+                            result['respuesta'] = result['output']
+
+                        # Validar que tenga respuesta
+                        if not result.get('respuesta'):
+                            logger.error(f"❌ Respuesta sin campo 'respuesta' ni 'output': {result}")
+                            return {
+                                "error": "missing_response_field",
+                                "respuesta": "No pude obtener una respuesta del sistema. Por favor, intenta de nuevo."
+                            }
+
+                        logger.info(f"✅ Búsqueda vectorial exitosa - Respuesta: {len(result['respuesta'])} chars")
+                        return result
+
+                    except ValueError as e:
+                        logger.error(f"❌ Error parseando JSON de n8n: {e}")
+                        logger.error(f"Response text: {response.text}")
+                        return {
+                            "error": "json_parse_error",
+                            "respuesta": "Hubo un error procesando la respuesta. Por favor, intenta de nuevo."
+                        }
                 else:
                     logger.error(f"Error en webhook políticas: {response.status_code} - {response.text}")
                     return {
