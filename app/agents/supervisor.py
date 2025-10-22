@@ -174,7 +174,7 @@ class SupervisorAgent:
 
                 # NUEVO: Saludo condicional basado en detección y frecuencia
                 last_message = state["messages"][-1].content if state["messages"] else ""
-                session = session_manager.get_or_create_session(session_id)
+                session = session_manager.get_session(session_id)
 
                 # Solo saludar si el usuario saludó Y no lo hicimos recientemente
                 if greeting_detector.is_greeting(last_message) and session.should_greet(hours_threshold=6):
@@ -225,7 +225,7 @@ class SupervisorAgent:
                 await phone_repository.save_phone_user_mapping(session_id, user.id)
 
                 # Primera autenticación siempre saluda (porque el usuario acabó de dar DNI)
-                session = session_manager.get_or_create_session(session_id)
+                session = session_manager.get_session(session_id)
                 response = f"¡Perfecto, {user.nombre}! Ya te reconocí.\n\n¿En qué te puedo ayudar hoy?"
                 state["messages"].append(AIMessage(content=response))
                 session.mark_greeted()  # Marcar que se saludó
