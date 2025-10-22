@@ -62,7 +62,9 @@ class AcademicTools:
             request = HorariosRequest(
                 alumno_id=params.get('alumno_id'),
                 materia_nombre=params.get('materia_nombre'),
-                dia_semana=params.get('dia_semana')
+                dia_semana=params.get('dia_semana'),
+                fecha_desde=params.get('fecha_desde'),
+                fecha_hasta=params.get('fecha_hasta')
             )
             
             logger.info(f"Consultando horarios: alumno_id={request.alumno_id}")
