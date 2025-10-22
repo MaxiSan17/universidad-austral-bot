@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.llm_factory import llm_factory
 from app.session.session_manager import session_manager
 from app.utils.logger import get_logger
+from app.utils.greeting_detector import greeting_detector
 from app.agents.academic_agent import AcademicAgent
 from app.agents.financial_agent import FinancialAgent
 from app.agents.policies_agent import PoliciesAgent
@@ -170,9 +171,18 @@ class SupervisorAgent:
                     "legajo": user.legajo,
                     "tipo": user.tipo
                 }
-                
-                response = f"¡Hola de nuevo, {user.nombre}! 👋\n\n¿En qué te puedo ayudar hoy?"
-                state["messages"].append(AIMessage(content=response))
+
+                # NUEVO: Saludo condicional basado en detección y frecuencia
+                last_message = state["messages"][-1].content if state["messages"] else ""
+                session = session_manager.get_or_create_session(session_id)
+
+                # Solo saludar si el usuario saludó Y no lo hicimos recientemente
+                if greeting_detector.is_greeting(last_message) and session.should_greet(hours_threshold=6):
+                    response = f"¡Hola de nuevo, {user.nombre}! 👋\n\n¿En qué te puedo ayudar hoy?"
+                    state["messages"].append(AIMessage(content=response))
+                    session.mark_greeted()
+                    logger.info(f"✋ Saludo enviado a {user.nombre} (primera vez en 6+ horas)")
+
                 state["next"] = "supervisor"
                 return state
             else:
@@ -214,8 +224,13 @@ class SupervisorAgent:
                 logger.info(f"💾 Guardando asociación persistente: {session_id} → {user.id}")
                 await phone_repository.save_phone_user_mapping(session_id, user.id)
 
+                # Primera autenticación siempre saluda (porque el usuario acabó de dar DNI)
+                session = session_manager.get_or_create_session(session_id)
                 response = f"¡Perfecto, {user.nombre}! Ya te reconocí.\n\n¿En qué te puedo ayudar hoy?"
                 state["messages"].append(AIMessage(content=response))
+                session.mark_greeted()  # Marcar que se saludó
+                logger.info(f"✋ Saludo de bienvenida enviado a {user.nombre} (primera autenticación)")
+
                 # Terminar aquí - NO ir al supervisor automáticamente
                 state["next"] = "END"
             else:

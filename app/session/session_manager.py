@@ -20,6 +20,7 @@ class Session:
     current_agent: Optional[str] = None
     context: Dict[str, Any] = field(default_factory=dict)
     conversation_id: Optional[str] = None  # ID de conversación de Chatwoot/n8n
+    last_greeting: Optional[datetime] = None  # Timestamp del último saludo
 
     def is_expired(self) -> bool:
         """Verifica si la sesión ha expirado"""
@@ -29,6 +30,27 @@ class Session:
     def update_activity(self):
         """Actualiza la última actividad"""
         self.last_activity = datetime.now()
+
+    def should_greet(self, hours_threshold: int = 6) -> bool:
+        """
+        Determina si se debe saludar al usuario.
+
+        Args:
+            hours_threshold: Horas que deben pasar para volver a saludar
+
+        Returns:
+            True si no se ha saludado hoy o pasaron más de X horas
+        """
+        if not self.last_greeting:
+            return True
+
+        hours_since_greeting = (datetime.now() - self.last_greeting).total_seconds() / 3600
+        return hours_since_greeting >= hours_threshold
+
+    def mark_greeted(self):
+        """Marca que se acaba de saludar al usuario"""
+        self.last_greeting = datetime.now()
+        logger.debug(f"✋ Marcado saludo para sesión {self.session_id}")
 
 
 class MessageQueue:
