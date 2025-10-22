@@ -13,6 +13,7 @@ from app.models import (
     TipoExamen
 )
 from app.utils.logger import get_logger
+from app.utils.temporal_parser import temporal_parser
 from pydantic import ValidationError
 
 logger = get_logger(__name__)
@@ -36,6 +37,7 @@ class CalendarTools:
         - fecha_desde: (opcional) Fecha desde (YYYY-MM-DD o date object)
         - fecha_hasta: (opcional) Fecha hasta (YYYY-MM-DD o date object)
         - tipo_examen: (opcional) Tipo de examen
+        - query: (opcional) Query original para parsear expresiones temporales
 
         Respuesta:
         {
@@ -63,19 +65,39 @@ class CalendarTools:
             # Parsear fechas si vienen como string
             fecha_desde = params.get('fecha_desde')
             fecha_hasta = params.get('fecha_hasta')
-            
+            solo_proximo = params.get('solo_proximo', False)
+
+            # NUEVO: Parsear expresiones temporales si hay query
+            query_original = params.get('query', '')
+            if query_original:
+                parsed_desde, parsed_hasta, parsed_solo_proximo = temporal_parser.parse(query_original)
+
+                # Usar fechas parseadas si no hay fechas explícitas
+                if parsed_desde and not fecha_desde:
+                    fecha_desde = parsed_desde
+                    logger.info(f"📅 Fecha desde parseada: {fecha_desde}")
+
+                if parsed_hasta and not fecha_hasta:
+                    fecha_hasta = parsed_hasta
+                    logger.info(f"📅 Fecha hasta parseada: {fecha_hasta}")
+
+                # Usar solo_proximo parseado
+                if parsed_solo_proximo:
+                    solo_proximo = True
+                    logger.info("🎯 Detectado: solo retornar próximo examen")
+
             if fecha_desde and isinstance(fecha_desde, str):
                 try:
                     fecha_desde = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
                 except ValueError:
                     fecha_desde = None
-            
+
             if fecha_hasta and isinstance(fecha_hasta, str):
                 try:
                     fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
                 except ValueError:
                     fecha_hasta = None
-            
+
             # Parsear tipo de examen si viene como string
             tipo_examen = params.get('tipo_examen')
             if tipo_examen and isinstance(tipo_examen, str):
@@ -83,24 +105,25 @@ class CalendarTools:
                     tipo_examen = TipoExamen(tipo_examen)
                 except ValueError:
                     tipo_examen = None
-            
+
             # Crear Request Pydantic (con validación automática)
             request = ExamenesRequest(
                 alumno_id=params.get('alumno_id'),
                 materia_nombre=params.get('materia_nombre') or params.get('materia'),
                 fecha_desde=fecha_desde,
                 fecha_hasta=fecha_hasta,
-                tipo_examen=tipo_examen
+                tipo_examen=tipo_examen,
+                solo_proximo=solo_proximo
             )
-            
-            logger.info(f"Consultando exámenes: alumno_id={request.alumno_id}, materia={request.materia_nombre}")
-            
+
+            logger.info(f"Consultando exámenes: alumno_id={request.alumno_id}, materia={request.materia_nombre}, solo_proximo={request.solo_proximo}")
+
             # Llamar al repository con el request validado
             response: ExamenesResponse = await self.repository.get_examenes_alumno(request)
-            
+
             # Convertir response a dict para mantener compatibilidad
             return response.dict()
-            
+
         except ValidationError as e:
             logger.error(f"Error de validación en consultar_examenes: {e}")
             return None

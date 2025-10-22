@@ -235,31 +235,41 @@ RESPUESTA (una palabra):"""
     async def _handle_exams(self, query: str, user_info: Dict[str, Any]) -> str:
         """Maneja consultas sobre exámenes usando ExamenesResponse"""
         try:
-            params = {"alumno_id": user_info["id"]}
+            params = {
+                "alumno_id": user_info["id"],
+                "query": query  # NUEVO: pasar query original para parseo temporal
+            }
 
             # Detectar materia específica
             materia = self._extract_subject_from_query(query)
             if materia:
                 params["materia_nombre"] = materia
 
-            # Detectar mes específico
-            fecha_desde, fecha_hasta = self._extract_month_from_query(query)
-            if fecha_desde:
-                params["fecha_desde"] = fecha_desde
-            if fecha_hasta:
-                params["fecha_hasta"] = fecha_hasta
-
             # Detectar tipo de examen
             tipo = self._extract_exam_type(query)
             if tipo:
                 params["tipo_examen"] = tipo
+
+            # NOTA: Las fechas ahora se parsean automáticamente en CalendarTools
+            # usando temporal_parser, pero mantenemos el método legacy como fallback
+            if not any(kw in query.lower() for kw in ['hoy', 'mañana', 'semana', 'mes', 'día', 'próximo']):
+                # Solo usar método legacy si no hay expresiones temporales
+                fecha_desde, fecha_hasta = self._extract_month_from_query(query)
+                if fecha_desde:
+                    params["fecha_desde"] = fecha_desde
+                if fecha_hasta:
+                    params["fecha_hasta"] = fecha_hasta
 
             result_dict = await self.tools.consultar_examenes(params)
 
             if result_dict and result_dict.get("examenes"):
                 # Convertir a modelo Pydantic
                 response = ExamenesResponse(**result_dict)
-                return self._format_exams_response(response, user_info["nombre"])
+
+                # Detectar si es respuesta de "solo próximo" para personalizar mensaje
+                solo_proximo = len(response.examenes) == 1 and 'próximo' in query.lower()
+
+                return self._format_exams_response(response, user_info["nombre"], solo_proximo=solo_proximo)
             else:
                 materia_text = f" de {materia}" if materia else ""
                 return f"{EMOJIS['examen']} ¡Hola {user_info['nombre']}!\n\n{EMOJIS['info']} No encontré exámenes{materia_text} para las fechas solicitadas.\n\n¿Necesitás información sobre otra fecha o materia? {EMOJIS['ayuda']}"
@@ -404,38 +414,50 @@ Puedo ayudarte con:
     # FORMATTERS CON PYDANTIC
     # =====================================================
 
-    def _format_exams_response(self, response: ExamenesResponse, nombre: str) -> str:
+    def _format_exams_response(self, response: ExamenesResponse, nombre: str, solo_proximo: bool = False) -> str:
         """Formatea la respuesta de exámenes usando ExamenesResponse"""
         if not response.tiene_examenes:
             return f"{EMOJIS['examen']} ¡Hola {nombre}!\n\n{EMOJIS['info']} No tenés exámenes programados en los próximos días.\n\n¿Necesitás información sobre alguna fecha específica? {EMOJIS['ayuda']}"
 
         output = f"{EMOJIS['examen']} ¡Hola {nombre}!\n\n"
-        output += f"{EMOJIS['calendario']} **Tus próximos exámenes:** ({response.total} en total)\n\n"
 
-        # Resaltar exámenes próximos si hay
-        proximos = response.examenes_proximos
-        if proximos:
-            output += f"{EMOJIS['advertencia']} **¡Exámenes próximos! (7 días)**\n\n"
-            for examen in proximos:
+        # Personalizar título según contexto
+        if solo_proximo:
+            output += f"{EMOJIS['calendario']} **Tu próximo examen:**\n\n"
+        else:
+            output += f"{EMOJIS['calendario']} **Tus próximos exámenes:** ({response.total} en total)\n\n"
+
+        # Si es solo próximo, mostrar directamente sin secciones
+        if solo_proximo:
+            for examen in response.examenes:
                 output += self._format_single_exam(examen)
                 output += "\n"
+        else:
+            # Resaltar exámenes próximos si hay
+            proximos = response.examenes_proximos
+            if proximos:
+                output += f"{EMOJIS['advertencia']} **¡Exámenes próximos! (7 días)**\n\n"
+                for examen in proximos:
+                    output += self._format_single_exam(examen)
+                    output += "\n"
 
-        # Mostrar resto de exámenes
-        otros = [e for e in response.examenes if not e.es_proximo]
-        if otros:
-            output += f"{EMOJIS['calendario']} **Otros exámenes:**\n\n"
-            for examen in otros:
-                output += self._format_single_exam(examen)
-                output += "\n"
+            # Mostrar resto de exámenes
+            otros = [e for e in response.examenes if not e.es_proximo]
+            if otros:
+                output += f"{EMOJIS['calendario']} **Otros exámenes:**\n\n"
+                for examen in otros:
+                    output += self._format_single_exam(examen)
+                    output += "\n"
 
-        # Mostrar resumen por tipo usando property examenes_por_tipo
-        tipos_count = {tipo: len(exams) for tipo, exams in response.examenes_por_tipo.items()}
-        if len(tipos_count) > 1:
-            output += "\n📊 **Resumen:**\n"
-            for tipo, count in tipos_count.items():
-                # tipo ya es string por use_enum_values=True
-                tipo_name = tipo.capitalize() if isinstance(tipo, str) else tipo.value.capitalize()
-                output += f"• {count} {tipo_name}(es)\n"
+        # Mostrar resumen por tipo solo si NO es "solo próximo"
+        if not solo_proximo:
+            tipos_count = {tipo: len(exams) for tipo, exams in response.examenes_por_tipo.items()}
+            if len(tipos_count) > 1:
+                output += "\n📊 **Resumen:**\n"
+                for tipo, count in tipos_count.items():
+                    # tipo ya es string por use_enum_values=True
+                    tipo_name = tipo.capitalize() if isinstance(tipo, str) else tipo.value.capitalize()
+                    output += f"• {count} {tipo_name}(es)\n"
 
         output += f"\n¿Necesitás información sobre algún examen específico? {EMOJIS['ayuda']}"
         return output

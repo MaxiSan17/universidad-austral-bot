@@ -25,16 +25,19 @@ class QueryClassifier:
                 # Keywords de alta prioridad (peso 3)
                 "high": [
                     "parcial", "final", "examen", "recuperatorio",
-                    "fecha de examen", "cuando es el", "calendario de examenes"
+                    "fecha de examen", "cuando es el", "calendario de examenes",
+                    "proximo parcial", "proximo final", "siguiente examen"
                 ],
                 # Keywords de media prioridad (peso 2)
                 "medium": [
                     "calendario", "evento", "feriado", "inscripcion",
-                    "inicio de clases", "fin de cuatrimestre"
+                    "inicio de clases", "fin de cuatrimestre",
+                    "esta semana", "semana que viene", "este mes", "mes que viene"
                 ],
                 # Keywords de baja prioridad (peso 1)
                 "low": [
-                    "cuando", "fecha", "dia", "semana que viene"
+                    "cuando", "fecha", "dia", "hoy", "mañana", "manana",
+                    "pasado mañana", "pasado manana", "proximo", "siguiente"
                 ]
             },
             "academic": {
@@ -84,12 +87,19 @@ class QueryClassifier:
                 r"cuando (es|sera|tengo|hay).*(parcial|final|examen)",
                 r"(fecha|dia).*(parcial|final|examen|evaluacion)",
                 r"(calendario|cronograma).*(examen|evaluacion)",
-                r"(proximo|siguiente|esta semana|mes que viene).*(parcial|final)"
+                r"(proximo|siguiente|esta semana|mes que viene).*(parcial|final)",
+                r"(hoy|ma[ñn]ana|pasado ma[ñn]ana).*(parcial|final|examen)",
+                r"(esta|la) semana.*(parcial|final|examen)",
+                r"(este|el) mes.*(parcial|final|examen)",
+                r"en \d+ d[ií]as?.*(parcial|final|examen)",
+                r"(cual|cuál) es (mi|el) (proximo|próximo|siguiente).*(parcial|final|examen)"
             ],
             "academic": [
                 r"cuando (tengo|es|hay).*(clase|cursada)",
                 r"(horario|hora).*(clase|materia|cursada)",
-                r"(donde|que aula|salon).*(clase|cursada)"
+                r"(donde|que aula|salon).*(clase|cursada)",
+                r"(hoy|ma[ñn]ana|pasado ma[ñn]ana).*(clase|cursada)",
+                r"(esta|la) semana.*(clase|cursada)"
             ]
         }
     

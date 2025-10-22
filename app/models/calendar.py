@@ -46,6 +46,7 @@ class ExamenesRequest(BaseModelConfig):
     fecha_desde: Optional[date] = Field(None, description="Fecha inicio (YYYY-MM-DD)")
     fecha_hasta: Optional[date] = Field(None, description="Fecha fin (YYYY-MM-DD)")
     tipo_examen: Optional[TipoExamen] = Field(None, description="Filtrar por tipo de examen")
+    solo_proximo: bool = Field(default=False, description="Retornar solo el examen más próximo")
     
     @validator('alumno_id')
     def validate_id(cls, v):

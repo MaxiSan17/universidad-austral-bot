@@ -91,7 +91,7 @@ class CalendarRepository:
                 return ExamenesResponse(examenes=[], total=0)
             
             logger.info(f"Se encontraron {len(examenes_response.data)} exámenes")
-            
+
             # Enriquecer con datos de materia
             examenes = []
             for examen in examenes_response.data:
@@ -159,9 +159,14 @@ class CalendarRepository:
                 except Exception as e:
                     logger.error(f"Error procesando examen {examen.get('id')}: {e}")
                     continue
-            
+
             logger.info(f"Se formatearon {len(examenes)} exámenes exitosamente")
-            
+
+            # NUEVO: Si solo_proximo=True, retornar solo el primer examen
+            if request.solo_proximo and examenes:
+                logger.info(f"🎯 Solo próximo activado: retornando solo el examen más cercano")
+                examenes = [examenes[0]]
+
             return ExamenesResponse(examenes=examenes, total=len(examenes))
             
         except Exception as e:

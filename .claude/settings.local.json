@@ -8,7 +8,8 @@
       "WebFetch(domain:docs.langchain.com)",
       "Bash(docker-compose restart:*)",
       "Bash(docker compose restart:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(del:*)"
     ],
     "deny": [],
     "ask": []
