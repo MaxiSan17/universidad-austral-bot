@@ -99,6 +99,79 @@ class GreetingDetector:
 
         return message.strip()
 
+    def has_content_beyond_greeting(self, message: str) -> bool:
+        """
+        Detecta si hay contenido significativo además del saludo.
+
+        Args:
+            message: Mensaje del usuario
+
+        Returns:
+            True si hay una petición/consulta además del saludo
+            False si es solo un saludo cordial
+        """
+        if not message:
+            return False
+
+        message_lower = message.lower().strip()
+
+        # Remover saludos conocidos
+        cleaned = message_lower
+
+        # Remover todas las variantes de saludos
+        greeting_words = [
+            'hola', 'buenas', 'buenos días', 'buen día', 'buenas tardes',
+            'buenas noches', 'que tal', 'qué tal', 'como andas', 'cómo andás',
+            'como estas', 'cómo estás', 'todo bien', 'che', 'holi', 'hey', 'hi',
+            'saludos'
+        ]
+
+        for greeting in greeting_words:
+            # Remover con variaciones de repetición (holaaa, buenaaas)
+            pattern = greeting[0] + greeting[1:-1] + greeting[-1] + '+'
+            cleaned = re.sub(r'\b' + pattern + r'\b', '', cleaned, flags=re.IGNORECASE)
+            # Remover normal
+            cleaned = cleaned.replace(greeting, '')
+
+        # Remover emojis de saludo
+        for emoji in self.greeting_emojis:
+            cleaned = cleaned.replace(emoji, '')
+
+        # Remover puntuación, espacios, saltos de línea
+        cleaned = re.sub(r'[!?¿¡,.\n\s]+', ' ', cleaned).strip()
+
+        # Si queda contenido significativo (>10 caracteres), hay una petición real
+        has_content = len(cleaned) > 10
+
+        if has_content:
+            logger.debug(f"💬 Contenido más allá del saludo: '{cleaned[:50]}...'")
+        else:
+            logger.debug(f"👋 Solo saludo, sin contenido adicional")
+
+        return has_content
+
+    def remove_greeting_from_message(self, message: str) -> str:
+        """
+        Remueve el saludo del mensaje y retorna solo el contenido restante.
+
+        Args:
+            message: Mensaje completo
+
+        Returns:
+            Mensaje sin el saludo (útil para procesar la consulta real)
+        """
+        if not self.is_greeting(message):
+            return message
+
+        lines = message.split('\n')
+        non_greeting_lines = []
+
+        for line in lines:
+            if not self.is_greeting(line):
+                non_greeting_lines.append(line)
+
+        return '\n'.join(non_greeting_lines).strip()
+
 
 # Instancia global
 greeting_detector = GreetingDetector()

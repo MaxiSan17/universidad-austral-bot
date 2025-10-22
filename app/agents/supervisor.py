@@ -532,6 +532,62 @@ Te van a contactar en breve para resolver tu consulta.
         logger.info(f"Escalación activada para usuario: {user_name}")
         return state
 
+    async def _greeting_node(self, state: AgentState) -> AgentState:
+        """
+        Nodo especializado para manejar saludos cordiales.
+
+        Este nodo se activa cuando el usuario solo saluda sin hacer una petición específica.
+        El LLM tiene libertad para responder naturalmente y ofrecer ayuda.
+        """
+        user_name = state["user_info"].get("nombre", "Usuario")
+
+        # Obtener el mensaje del usuario
+        human_messages = [msg for msg in state["messages"] if isinstance(msg, HumanMessage)]
+        user_message = human_messages[-1].content if human_messages else ""
+
+        logger.info(f"👋 Procesando saludo cordial para {user_name}")
+
+        # Usar LLM para generar respuesta natural al saludo
+        system_prompt = f"""Eres un asistente universitario amigable de la Universidad Austral.
+
+El usuario ({user_name}) te está saludando de manera cordial sin hacer ninguna consulta específica.
+
+Responde de manera natural y amigable:
+- Devolver el saludo cordialmente
+- Ofrecer ayuda de manera general
+- Mencionar brevemente qué tipo de consultas puedes ayudar (horarios, exámenes, trámites, etc.)
+- Mantener el tono argentino informal (usar "vos")
+- Usar 1-2 emojis apropiados
+- IMPORTANTE: No inventar información ni dar respuestas específicas
+
+Mensaje del usuario: "{user_message}"
+
+Responde en máximo 3 líneas."""
+
+        try:
+            llm = llm_factory.create(temperature=0.7)  # Más creativo para saludos
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_message)
+            ]
+
+            response_obj = await llm.ainvoke(messages)
+            response = response_obj.content.strip()
+
+            logger.info(f"✅ Respuesta de saludo generada para {user_name}")
+
+        except Exception as e:
+            logger.error(f"Error generando respuesta de saludo: {e}")
+            # Fallback a respuesta predeterminada
+            response = f"""¡Hola {user_name}! 👋
+
+¿En qué te puedo ayudar hoy? Puedo ayudarte con horarios, exámenes, trámites administrativos y más. 🤝"""
+
+        state["messages"].append(AIMessage(content=response))
+        state["next"] = "END"
+
+        return state
+
     def _should_authenticate(self, state: AgentState) -> Literal["supervisor", "authentication", "END"]:
         """Decide si necesita autenticación"""
         return state["next"]

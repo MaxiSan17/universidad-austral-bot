@@ -11,7 +11,8 @@
       "mcp__ide__getDiagnostics",
       "Bash(del:*)",
       "Bash(docker-compose down:*)",
-      "Bash(docker compose:*)"
+      "Bash(docker compose:*)",
+      "mcp__memory__create_entities"
     ],
     "deny": [],
     "ask": []
