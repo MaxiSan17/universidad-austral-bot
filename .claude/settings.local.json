@@ -14,7 +14,8 @@
       "Bash(docker compose:*)",
       "mcp__memory__create_entities",
       "mcp__memory__search_nodes",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: Sistema completo de detección y manejo de saludos inteligente\n\nImplementación completa del sistema de saludos que permite al bot distinguir\nentre saludos puros y saludos con consultas, respondiendo apropiadamente.\n\nCambios principales:\n- query_classifier: Detecta saludos puros vs saludos con consultas\n- supervisor: Integra greeting_node en el workflow de LangGraph\n- greeting_detector: Mejora remove_greeting_from_message() para una línea\n- greeting_node: Saludo condicional basado en frecuencia (6 horas)\n\nFeatures:\n✅ Detecta \"Hola\" como greeting puro → responde con saludo cordial\n✅ Detecta \"Hola, quiero mi horario\" → remueve saludo y clasifica consulta\n✅ Saludo cálido si pasaron 6+ horas (usa LLM, temp=0.7)\n✅ Saludo breve si saludó recientemente\n\nTesting:\n✅ 10/11 tests pasados (90.9%)\n✅ Keywords mejoradas: academic, calendar, financial\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ],
     "deny": [],
     "ask": []
