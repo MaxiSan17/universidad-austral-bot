@@ -92,6 +92,7 @@ class SupervisorAgent:
         # Nodos principales
         workflow.add_node("supervisor", self._supervisor_node)
         workflow.add_node("authentication", self._authentication_node)
+        workflow.add_node("greeting", self._greeting_node)
         workflow.add_node("academic", self._academic_node)
         workflow.add_node("financial", self._financial_node)
         workflow.add_node("policies", self._policies_node)
@@ -117,6 +118,7 @@ class SupervisorAgent:
             "supervisor",
             self._route_to_agent,
             {
+                "greeting": "greeting",
                 "academic": "academic",
                 "financial": "financial",
                 "policies": "policies",
@@ -127,7 +129,7 @@ class SupervisorAgent:
         )
 
         # Todos los agentes terminan directamente (sin volver al supervisor)
-        for agent in ["academic", "financial", "policies", "calendar"]:
+        for agent in ["greeting", "academic", "financial", "policies", "calendar"]:
             workflow.add_edge(agent, END)
 
         # Escalación termina la conversación
@@ -251,6 +253,21 @@ class SupervisorAgent:
 
 Tu trabajo es analizar cada consulta del usuario y clasificarla en UNA de estas categorías:
 
+## 👋 GREETING (Saludo Cordial)
+Responsable de:
+- Saludos simples sin consulta específica
+- Mensajes cordiales de cortesía
+- Interacciones sociales básicas
+
+Ejemplos de consultas:
+- "Hola"
+- "Buenas tardes"
+- "Qué tal"
+- "Hola, cómo andás?"
+- "Buenos días 👋"
+
+IMPORTANTE: Si el usuario saluda PERO también hace una consulta específica (ej: "Hola, quiero mi horario"), NO clasificar como greeting. Clasificar según la consulta real.
+
 ## 🎓 ACADEMIC (Agente Académico)
 Responsable de:
 - Horarios de clases y cursada
@@ -351,6 +368,7 @@ Cuando:
 ## RESPUESTA:
 
 Responde SOLO con UNA palabra (el nombre del agente):
+- greeting
 - academic
 - calendar
 - financial
@@ -383,7 +401,7 @@ NO agregues explicaciones, puntos, o texto adicional.
                 confidence = 0.85  # Asumimos alta confianza del LLM
 
             # Validar la respuesta
-            valid_agents = ["academic", "financial", "policies", "calendar", "escalation"]
+            valid_agents = ["greeting", "academic", "financial", "policies", "calendar", "escalation"]
             if agent_choice not in valid_agents:
                 logger.warning(f"⚠️ Agente inválido: {agent_choice}. Usando 'academic' como fallback")
                 agent_choice = "academic"  # Default
@@ -537,8 +555,9 @@ Te van a contactar en breve para resolver tu consulta.
         Nodo especializado para manejar saludos cordiales.
 
         Este nodo se activa cuando el usuario solo saluda sin hacer una petición específica.
-        El LLM tiene libertad para responder naturalmente y ofrecer ayuda.
+        Considera la frecuencia de saludos para no ser repetitivo.
         """
+        session_id = state["session_id"]
         user_name = state["user_info"].get("nombre", "Usuario")
 
         # Obtener el mensaje del usuario
@@ -547,8 +566,18 @@ Te van a contactar en breve para resolver tu consulta.
 
         logger.info(f"👋 Procesando saludo cordial para {user_name}")
 
-        # Usar LLM para generar respuesta natural al saludo
-        system_prompt = f"""Eres un asistente universitario amigable de la Universidad Austral.
+        # Obtener sesión para verificar si debe saludar
+        session = session_manager.get_session(session_id)
+
+        # Decidir si debe saludar formalmente o ser más breve
+        should_greet_warmly = session.should_greet(hours_threshold=6)
+
+        if should_greet_warmly:
+            # Primera vez en 6+ horas: saludo cálido
+            logger.info(f"✋ Saludo cálido para {user_name} (primera vez en 6+ horas)")
+
+            # Usar LLM para generar respuesta natural al saludo
+            system_prompt = f"""Eres un asistente universitario amigable de la Universidad Austral.
 
 El usuario ({user_name}) te está saludando de manera cordial sin hacer ninguna consulta específica.
 
@@ -564,24 +593,32 @@ Mensaje del usuario: "{user_message}"
 
 Responde en máximo 3 líneas."""
 
-        try:
-            llm = llm_factory.create(temperature=0.7)  # Más creativo para saludos
-            messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_message)
-            ]
+            try:
+                llm = llm_factory.create(temperature=0.7)  # Más creativo para saludos
+                messages = [
+                    SystemMessage(content=system_prompt),
+                    HumanMessage(content=user_message)
+                ]
 
-            response_obj = await llm.ainvoke(messages)
-            response = response_obj.content.strip()
+                response_obj = await llm.ainvoke(messages)
+                response = response_obj.content.strip()
 
-            logger.info(f"✅ Respuesta de saludo generada para {user_name}")
+                logger.info(f"✅ Respuesta de saludo generada para {user_name}")
 
-        except Exception as e:
-            logger.error(f"Error generando respuesta de saludo: {e}")
-            # Fallback a respuesta predeterminada
-            response = f"""¡Hola {user_name}! 👋
+            except Exception as e:
+                logger.error(f"Error generando respuesta de saludo: {e}")
+                # Fallback a respuesta predeterminada
+                response = f"""¡Hola {user_name}! 👋
 
 ¿En qué te puedo ayudar hoy? Puedo ayudarte con horarios, exámenes, trámites administrativos y más. 🤝"""
+
+            # Marcar que se saludó
+            session.mark_greeted()
+
+        else:
+            # Ya saludamos hace poco: respuesta más breve
+            logger.info(f"👋 Saludo breve para {user_name} (ya saludamos hace poco)")
+            response = f"¿En qué te puedo ayudar, {user_name}? 🤝"
 
         state["messages"].append(AIMessage(content=response))
         state["next"] = "END"
@@ -592,7 +629,7 @@ Responde en máximo 3 líneas."""
         """Decide si necesita autenticación"""
         return state["next"]
 
-    def _route_to_agent(self, state: AgentState) -> Literal["academic", "financial", "policies", "calendar", "escalation", "END"]:
+    def _route_to_agent(self, state: AgentState) -> Literal["greeting", "academic", "financial", "policies", "calendar", "escalation", "END"]:
         """Enruta al agente correspondiente"""
         return state["next"]
 

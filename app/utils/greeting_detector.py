@@ -118,12 +118,13 @@ class GreetingDetector:
         # Remover saludos conocidos
         cleaned = message_lower
 
-        # Remover todas las variantes de saludos
+        # Remover todas las variantes de saludos (con y sin tildes)
         greeting_words = [
-            'hola', 'buenas', 'buenos días', 'buen día', 'buenas tardes',
-            'buenas noches', 'que tal', 'qué tal', 'como andas', 'cómo andás',
-            'como estas', 'cómo estás', 'todo bien', 'che', 'holi', 'hey', 'hi',
-            'saludos'
+            'hola', 'buenas', 'buenos días', 'buenos dias', 'buen día', 'buen dia',
+            'buenas tardes', 'buenas noches', 'que tal', 'qué tal',
+            'como andas', 'cómo andás', 'como andás', 'cómo andas',
+            'como estas', 'cómo estás', 'como estás', 'cómo estas',
+            'todo bien', 'che', 'holi', 'hey', 'hi', 'saludos'
         ]
 
         for greeting in greeting_words:
@@ -163,14 +164,25 @@ class GreetingDetector:
         if not self.is_greeting(message):
             return message
 
-        lines = message.split('\n')
-        non_greeting_lines = []
+        cleaned = message.lower()
 
-        for line in lines:
-            if not self.is_greeting(line):
-                non_greeting_lines.append(line)
+        # Remover patrones de saludo específicos
+        for pattern in self.greeting_patterns:
+            cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
 
-        return '\n'.join(non_greeting_lines).strip()
+        # Remover emojis de saludo
+        for emoji in self.greeting_emojis:
+            cleaned = cleaned.replace(emoji, '')
+
+        # Remover puntuación extra al inicio (comas, signos de exclamación/interrogación)
+        cleaned = re.sub(r'^[,¡!¿?\s]+', '', cleaned)
+        cleaned = cleaned.strip()
+
+        # Si quedó vacío, retornar el mensaje original
+        if not cleaned:
+            return message
+
+        return cleaned
 
 
 # Instancia global

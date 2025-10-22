@@ -4,6 +4,7 @@ Combina keywords determinísticas con LLM para casos ambiguos
 """
 from typing import Optional, Tuple, Dict, List
 from app.utils.logger import get_logger
+from app.utils.greeting_detector import greeting_detector
 import re
 
 logger = get_logger(__name__)
@@ -24,9 +25,10 @@ class QueryClassifier:
             "calendar": {
                 # Keywords de alta prioridad (peso 3)
                 "high": [
-                    "parcial", "final", "examen", "recuperatorio",
+                    "parcial", "final", "examen", "recuperatorio", "parciales", "finales", "examenes",
                     "fecha de examen", "cuando es el", "calendario de examenes",
-                    "proximo parcial", "proximo final", "siguiente examen"
+                    "proximo parcial", "proximo final", "siguiente examen", "tengo un parcial",
+                    "tengo un final", "tengo examen"
                 ],
                 # Keywords de media prioridad (peso 2)
                 "medium": [
@@ -44,26 +46,28 @@ class QueryClassifier:
                 "high": [
                     "horario", "clase", "aula", "salon", "profesor",
                     "docente", "comision", "cursada", "inscripto",
-                    "creditos vu", "credito", "materia"
+                    "creditos vu", "credito", "materia", "materias"
                 ],
                 "medium": [
                     "curso", "catedra", "dictado", "turno",
-                    "presencial", "virtual", "zoom"
+                    "presencial", "virtual", "zoom", "quiero saber",
+                    "ver mi", "mi horario"
                 ],
                 "low": [
-                    "tengo", "estoy", "voy", "ir", "asistir"
+                    "tengo", "estoy", "voy", "ir", "asistir", "saber"
                 ]
             },
             "financial": {
                 "high": [
                     "pago", "deuda", "debo", "cuota", "vencimiento",
-                    "factura", "arancel", "cobro", "cuenta"
+                    "factura", "arancel", "cobro", "cuenta", "cuanto debo",
+                    "tengo deudas", "tengo deuda"
                 ],
                 "medium": [
                     "precio", "costo", "monto", "saldo", "adeudo"
                 ],
                 "low": [
-                    "dinero", "plata", "pagar", "dolar", "peso"
+                    "dinero", "plata", "pagar", "dolar", "peso", "cuanto"
                 ]
             },
             "policies": {
@@ -106,18 +110,30 @@ class QueryClassifier:
     def classify(self, query: str) -> Tuple[Optional[str], float, str]:
         """
         Clasifica una query en un agente.
-        
+
         Args:
             query: Texto de la consulta del usuario
-            
+
         Returns:
             Tuple de (agente, confianza, método)
-            - agente: "academic", "calendar", "financial", "policies", None
+            - agente: "academic", "calendar", "financial", "policies", "greeting", None
             - confianza: 0.0 a 1.0
-            - método: "keywords", "pattern", "ambiguous"
+            - método: "keywords", "pattern", "greeting", "ambiguous"
         """
         query_lower = query.lower().strip()
-        
+
+        # PASO 0: Detectar saludos puros (sin consulta adicional)
+        if greeting_detector.is_greeting(query) and not greeting_detector.has_content_beyond_greeting(query):
+            logger.info(f"👋 Clasificación: greeting puro (sin consulta adicional)")
+            return "greeting", 0.98, "greeting"
+
+        # PASO 0.5: Si hay saludo + contenido, remover el saludo y clasificar el contenido
+        if greeting_detector.is_greeting(query) and greeting_detector.has_content_beyond_greeting(query):
+            # Remover el saludo para clasificar solo el contenido real
+            query_without_greeting = greeting_detector.remove_greeting_from_message(query)
+            query_lower = query_without_greeting.lower().strip()
+            logger.info(f"🔄 Saludo removido. Clasificando contenido: '{query_lower[:50]}...'")
+
         # PASO 1: Buscar patrones temporales específicos
         pattern_result = self._match_temporal_patterns(query_lower)
         if pattern_result:
