@@ -82,10 +82,37 @@ class AcademicRepository:
             # Filtro por día (si se especificó)
             if request.dia_semana:
                 horarios_raw = [
-                    h for h in horarios_raw 
+                    h for h in horarios_raw
                     if h.get('dia_semana') == request.dia_semana
                 ]
-            
+
+            # Filtro por rango de fechas (para expresiones temporales como "mañana", "esta semana")
+            if request.fecha_desde or request.fecha_hasta:
+                from datetime import date, timedelta
+
+                # Calcular qué días de la semana están en el rango
+                dias_en_rango = set()
+
+                fecha_inicio = request.fecha_desde or date.today()
+                fecha_fin = request.fecha_hasta or request.fecha_desde or date.today()
+
+                current_date = fecha_inicio
+                while current_date <= fecha_fin:
+                    # weekday() retorna 0=Lunes, 6=Domingo
+                    # Nuestro sistema usa 1=Lunes, 7=Domingo
+                    dia_num = current_date.weekday() + 1
+                    if dia_num == 7:  # Domingo
+                        dia_num = 7
+                    dias_en_rango.add(dia_num)
+                    current_date += timedelta(days=1)
+
+                logger.debug(f"Filtrando por días en rango {request.fecha_desde} - {request.fecha_hasta}: {dias_en_rango}")
+
+                horarios_raw = [
+                    h for h in horarios_raw
+                    if h.get('dia_semana') in dias_en_rango
+                ]
+
             # Convertir a modelos Pydantic
             horarios = []
             for h in horarios_raw:

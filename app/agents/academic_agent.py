@@ -2,6 +2,7 @@
 Agente académico usando Pydantic Models para mejor tipado y formateo
 """
 from typing import Dict, Any, Optional
+from datetime import date
 from difflib import SequenceMatcher
 from app.tools.academic_tools import AcademicTools
 from app.models import (
@@ -15,6 +16,7 @@ from app.models import (
 from app.core import DIAS_SEMANA_ES, EMOJIS
 from app.core.llm_factory import llm_factory
 from app.utils.logger import get_logger
+from app.utils.temporal_parser import temporal_parser
 
 logger = get_logger(__name__)
 
@@ -302,10 +304,24 @@ TONO: Amigable, informativo y profesional. Usa emojis apropiados.
             if materia_detectada:
                 params["materia_nombre"] = materia_detectada
 
-            # Detectar día específico
-            dia = self._extract_day_from_query(query)
-            if dia:
-                params["dia_semana"] = dia
+            # NUEVO: Parsear expresiones temporales usando TemporalParser
+            fecha_desde, fecha_hasta, solo_proximo = temporal_parser.parse(query.lower())
+
+            # Variable para guardar el contexto temporal (para el formatter)
+            contexto_temporal = None
+
+            if fecha_desde or fecha_hasta:
+                # Se detectó expresión temporal
+                params["fecha_desde"] = fecha_desde
+                params["fecha_hasta"] = fecha_hasta
+                contexto_temporal = self._get_temporal_context(query.lower(), fecha_desde, fecha_hasta)
+                logger.info(f"📅 Expresión temporal detectada: {contexto_temporal} ({fecha_desde} a {fecha_hasta})")
+            else:
+                # Fallback: Detectar día específico con el método legacy
+                dia = self._extract_day_from_query(query)
+                if dia:
+                    params["dia_semana"] = dia
+                    contexto_temporal = DIAS_SEMANA_ES.get(dia, "")
 
             # Llamar a la herramienta (retorna dict)
             result_dict = await self.tools.consultar_horarios(params)
@@ -313,7 +329,7 @@ TONO: Amigable, informativo y profesional. Usa emojis apropiados.
             if result_dict and result_dict.get("horarios"):
                 # Convertir dict a modelo Pydantic para aprovechar properties
                 response = HorariosResponse(**result_dict)
-                return self._format_schedule_response(response, user_info["nombre"])
+                return self._format_schedule_response(response, user_info["nombre"], contexto_temporal)
             else:
                 return f"¡Hola {user_info['nombre']}! 😅 No pude encontrar información sobre tus horarios en este momento."
 
@@ -467,16 +483,67 @@ Puedo contarte sobre:
 
         return None
 
+    def _get_temporal_context(self, query: str, fecha_desde: Optional[date], fecha_hasta: Optional[date]) -> str:
+        """
+        Determina el contexto temporal para usar en el mensaje de respuesta.
+
+        Args:
+            query: Query del usuario en minúsculas
+            fecha_desde: Fecha de inicio del rango
+            fecha_hasta: Fecha de fin del rango
+
+        Returns:
+            String con el contexto temporal (ej: "mañana", "esta semana", "la semana que viene")
+        """
+        if not fecha_desde:
+            return "esta semana"
+
+        # Detectar expresiones comunes en el query
+        if "mañana" in query or "mañana" in query:
+            return "mañana"
+        elif "hoy" in query:
+            return "hoy"
+        elif "pasado mañana" in query or "pasado manana" in query:
+            return "pasado mañana"
+        elif "esta semana" in query:
+            return "esta semana"
+        elif "semana que viene" in query or "próxima semana" in query or "siguiente semana" in query:
+            return "la semana que viene"
+        elif "este mes" in query:
+            return "este mes"
+        elif "mes que viene" in query or "próximo mes" in query or "siguiente mes" in query:
+            return "el mes que viene"
+        elif fecha_desde == fecha_hasta:
+            # Rango de un solo día
+            dia_nombre = temporal_parser.get_nombre_dia(fecha_desde)
+            return f"el {dia_nombre.lower()}"
+        else:
+            # Rango de múltiples días
+            return f"entre {fecha_desde.strftime('%d/%m')} y {fecha_hasta.strftime('%d/%m')}"
+
     # =====================================================
     # FORMATTERS CON PYDANTIC
     # =====================================================
 
-    def _format_schedule_response(self, response: HorariosResponse, nombre: str) -> str:
-        """Formatea la respuesta de horarios usando HorariosResponse"""
+    def _format_schedule_response(self, response: HorariosResponse, nombre: str, contexto_temporal: Optional[str] = None) -> str:
+        """
+        Formatea la respuesta de horarios usando HorariosResponse
+
+        Args:
+            response: Respuesta con horarios del alumno
+            nombre: Nombre del alumno
+            contexto_temporal: Contexto temporal detectado (ej: "mañana", "esta semana")
+        """
         if not response.tiene_horarios:
+            if contexto_temporal:
+                return f"¡Hola {nombre}! {EMOJIS['info']} No tenés clases {contexto_temporal}."
             return f"¡Hola {nombre}! {EMOJIS['info']} No encontré horarios registrados para vos."
 
-        output = f"¡Hola {nombre}! {EMOJIS['horario']} Te muestro tu horario para esta semana:\n\n"
+        # Mensaje de encabezado adaptativo según el contexto temporal
+        if contexto_temporal:
+            output = f"¡Hola {nombre}! {EMOJIS['horario']} Te muestro tu horario para {contexto_temporal}:\n\n"
+        else:
+            output = f"¡Hola {nombre}! {EMOJIS['horario']} Te muestro tu horario para esta semana:\n\n"
 
         # Agrupar por día usando la property dias_con_clases
         for dia_num in response.dias_con_clases:

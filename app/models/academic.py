@@ -25,11 +25,13 @@ class HorariosRequest(BaseModelConfig):
     alumno_id: str = Field(..., description="UUID del alumno")
     materia_nombre: Optional[str] = Field(None, description="Filtrar por materia específica")
     dia_semana: Optional[int] = Field(None, ge=1, le=7, description="Día de la semana (1=Lunes, 7=Domingo)")
-    
+    fecha_desde: Optional[date] = Field(None, description="Fecha de inicio del rango (para filtros temporales)")
+    fecha_hasta: Optional[date] = Field(None, description="Fecha de fin del rango (para filtros temporales)")
+
     @validator('alumno_id')
     def validate_id(cls, v):
         return UUIDMixin.validate_uuid(v)
-    
+
     @validator('materia_nombre')
     def normalize_materia(cls, v):
         """Normaliza el nombre de la materia"""

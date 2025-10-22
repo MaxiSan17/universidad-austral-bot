@@ -9,7 +9,9 @@
       "Bash(docker-compose restart:*)",
       "Bash(docker compose restart:*)",
       "mcp__ide__getDiagnostics",
-      "Bash(del:*)"
+      "Bash(del:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker compose:*)"
     ],
     "deny": [],
     "ask": []
