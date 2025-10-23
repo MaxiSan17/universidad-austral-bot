@@ -174,17 +174,8 @@ class SupervisorAgent:
                     "tipo": user.tipo
                 }
 
-                # NUEVO: Saludo condicional basado en detección y frecuencia
-                last_message = state["messages"][-1].content if state["messages"] else ""
-                session = session_manager.get_session(session_id)
-
-                # Solo saludar si el usuario saludó Y no lo hicimos recientemente
-                if greeting_detector.is_greeting(last_message) and session.should_greet(hours_threshold=6):
-                    response = f"¡Hola de nuevo, {user.nombre}! 👋\n\n¿En qué te puedo ayudar hoy?"
-                    state["messages"].append(AIMessage(content=response))
-                    session.mark_greeted()
-                    logger.info(f"✋ Saludo enviado a {user.nombre} (primera vez en 6+ horas)")
-
+                # Usuario ya autenticado - continuar al supervisor sin saludar
+                # (el greeting_node se encargará si el usuario saluda explícitamente)
                 state["next"] = "supervisor"
                 return state
             else:
