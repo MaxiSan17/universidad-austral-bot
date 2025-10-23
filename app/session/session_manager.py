@@ -22,6 +22,12 @@ class Session:
     conversation_id: Optional[str] = None  # ID de conversación de Chatwoot/n8n
     last_greeting: Optional[datetime] = None  # Timestamp del último saludo
 
+    # NUEVO: Contexto conversacional para referencias
+    last_query: Optional[str] = None  # Última consulta del usuario
+    last_query_type: Optional[str] = None  # Tipo de última consulta (horarios, examenes, etc)
+    last_query_data: Optional[Dict[str, Any]] = None  # Datos de la última consulta
+    last_response_summary: Optional[str] = None  # Resumen de última respuesta
+
     def is_expired(self) -> bool:
         """Verifica si la sesión ha expirado"""
         ttl = timedelta(minutes=settings.SESSION_TTL_MINUTES)
@@ -51,6 +57,44 @@ class Session:
         """Marca que se acaba de saludar al usuario"""
         self.last_greeting = datetime.now()
         logger.debug(f"✋ Marcado saludo para sesión {self.session_id}")
+
+    def update_query_context(
+        self,
+        query: str,
+        query_type: str,
+        query_data: Optional[Dict[str, Any]] = None,
+        response_summary: Optional[str] = None
+    ):
+        """
+        Actualiza el contexto de la última consulta para referencias futuras.
+
+        Args:
+            query: Consulta del usuario
+            query_type: Tipo de consulta (ej: "horarios", "examenes")
+            query_data: Datos relevantes de la consulta
+            response_summary: Resumen de la respuesta enviada
+        """
+        self.last_query = query
+        self.last_query_type = query_type
+        self.last_query_data = query_data or {}
+        self.last_response_summary = response_summary
+        logger.debug(f"📝 Contexto actualizado: {query_type} - {query[:50]}...")
+
+    def has_recent_context(self, max_minutes: int = 5) -> bool:
+        """
+        Verifica si hay contexto conversacional reciente para resolver referencias.
+
+        Args:
+            max_minutes: Minutos máximos desde la última consulta
+
+        Returns:
+            True si hay contexto reciente disponible
+        """
+        if not self.last_query:
+            return False
+
+        minutes_since = (datetime.now() - self.last_activity).total_seconds() / 60
+        return minutes_since <= max_minutes
 
 
 class MessageQueue:

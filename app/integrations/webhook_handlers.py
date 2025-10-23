@@ -17,36 +17,60 @@ webhook_router = APIRouter()
 
 
 # Función para enviar mensajes a Chatwoot
-async def send_message_to_chatwoot(conversation_id: int, message: str):
+async def send_message_to_chatwoot(conversation_id: int, message: str, private: bool = False):
     """
     Envía un mensaje a Chatwoot usando su API.
-    
+
     Args:
         conversation_id: ID de la conversación en Chatwoot
         message: Contenido del mensaje a enviar
+        private: Si True, mensaje es privado (nota interna)
     """
     if not settings.CHATWOOT_API_TOKEN or not settings.CHATWOOT_URL:
         logger.warning("Chatwoot no configurado. No se puede enviar mensaje.")
         return
-    
+
     url = f"{settings.CHATWOOT_URL}/api/v1/accounts/{settings.CHATWOOT_ACCOUNT_ID}/conversations/{conversation_id}/messages"
-    
+
     headers = {
         "api_access_token": settings.CHATWOOT_API_TOKEN,
         "Content-Type": "application/json"
     }
-    
+
     payload = {
         "content": message,
         "message_type": "outgoing",
-        "private": False
+        "private": private
     }
-    
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(url, json=payload, headers=headers)
         response.raise_for_status()
-        
+
     logger.info(f"Mensaje enviado a Chatwoot exitosamente (conversation {conversation_id})")
+
+
+async def send_progress_indicator(conversation_id: int, action: str = "Buscando información"):
+    """
+    Envía un indicador de progreso al usuario mientras se procesa la consulta.
+
+    Args:
+        conversation_id: ID de la conversación
+        action: Acción que se está realizando
+
+    Examples:
+        >>> await send_progress_indicator(123, "Consultando tus horarios")
+    """
+    if not settings.CHATWOOT_API_TOKEN:
+        return
+
+    progress_message = f"⏳ {action}..."
+
+    try:
+        await send_message_to_chatwoot(conversation_id, progress_message)
+        logger.debug(f"📊 Indicador de progreso enviado: {action}")
+    except Exception as e:
+        logger.warning(f"No se pudo enviar indicador de progreso: {e}")
 
 
 # Modelos Pydantic para validación de n8n

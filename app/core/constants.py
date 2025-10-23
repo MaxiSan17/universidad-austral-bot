@@ -86,7 +86,7 @@ EMOJIS = {
     "aula": "📍",
     "materia": "📖",
     "inscripcion": "📝",
-    
+
     # Calendario
     "examen": "📝",
     "parcial": "📝",
@@ -96,17 +96,17 @@ EMOJIS = {
     "evento": "📅",
     "feriado": "🏖️",
     "calendario": "📋",
-    
+
     # Financiero
     "pago": "💰",
     "deuda": "💳",
     "factura": "📄",
     "descuento": "🎁",
-    
+
     # Vida Universitaria
     "creditos_vu": "🎓",
     "actividad": "🎯",
-    
+
     # Estados
     "exito": "✅",
     "error": "❌",
@@ -114,12 +114,68 @@ EMOJIS = {
     "info": "ℹ️",
     "pregunta": "❓",
     "cargando": "⏳",
-    
+
     # Generales
     "saludo": "👋",
     "despedida": "👋",
-    "ayuda": "🤝"
+    "ayuda": "🤝",
+
+    # NUEVO: Modalidades (más visual)
+    "presencial": "🏫",
+    "virtual": "💻",
+    "hibrida": "🔄",
+
+    # NUEVO: Urgencia/Temporalidad
+    "hoy": "🔴",
+    "mañana": "🟡",
+    "proximo": "🟢",
+    "pasado": "⚫",
+
+    # NUEVO: Estados de progreso
+    "activo": "🟢",
+    "pendiente": "🟡",
+    "vencido": "🔴",
+    "completado": "✅",
+
+    # NUEVO: Hora del día
+    "mañana_tiempo": "☀️",
+    "tarde": "👋",
+    "noche": "🌙",
+
+    # NUEVO: Emocionales
+    "celebracion": "🎉",
+    "animo": "💪",
+    "tranquilo": "😊",
+    "preocupacion": "😓"
 }
+
+# =====================================================
+# VARIACIONES DE TONO CONVERSACIONAL
+# =====================================================
+
+GREETING_VARIATIONS = [
+    "¡Hola {nombre}!",
+    "¡Listo, {nombre}!",
+    "Acá va, {nombre}",
+    "Ya lo tengo, {nombre}",
+    "¡Dale, {nombre}!",
+    "{nombre}, acá está"
+]
+
+GREETING_TIME_BASED = {
+    "morning": "¡Buenos días, {nombre}! ☀️",
+    "afternoon": "¡Hola, {nombre}! 👋",
+    "evening": "¡Buenas tardes, {nombre}!",
+    "night": "¡Buenas noches, {nombre}! 🌙"
+}
+
+CLOSING_VARIATIONS = [
+    "¿Algo más? 🤝",
+    "Si necesitás algo, avisame 👍",
+    "Cualquier cosa, preguntame de nuevo",
+    "¿Te ayudo con algo más?",
+    ""  # Sin cierre (para respuestas muy claras)
+]
 
 # =====================================================
 # DEPARTAMENTOS PARA ESCALACIÓN

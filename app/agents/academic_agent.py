@@ -1,5 +1,6 @@
 """
-Agente académico usando Pydantic Models para mejor tipado y formateo
+Agente académico usando Pydantic Models para mejor tipado y formateo.
+Incluye mejoras de UX 2.0: variación de tono, emojis visuales, respuestas progresivas.
 """
 from typing import Dict, Any, Optional
 from datetime import date
@@ -17,6 +18,20 @@ from app.core import DIAS_SEMANA_ES, EMOJIS
 from app.core.llm_factory import llm_factory
 from app.utils.logger import get_logger
 from app.utils.temporal_parser import temporal_parser
+from app.utils.response_formatter import (
+    get_random_greeting,
+    get_random_closing,
+    get_modalidad_emoji,
+    create_summary_line,
+    build_response
+)
+from app.utils.emotional_tone import (
+    detect_schedule_context,
+    detect_credits_context,
+    apply_emotional_tone,
+    get_no_results_message
+)
+from app.session.session_manager import session_manager
 
 logger = get_logger(__name__)
 
@@ -527,46 +542,65 @@ Puedo contarte sobre:
 
     def _format_schedule_response(self, response: HorariosResponse, nombre: str, contexto_temporal: Optional[str] = None) -> str:
         """
-        Formatea la respuesta de horarios usando HorariosResponse
+        Formatea la respuesta de horarios con mejoras UX 2.0:
+        - Variación de tono
+        - Emojis visuales mejorados
+        - Tono emocional según contexto
+        - Respuesta progresiva (resumen → detalle)
 
         Args:
             response: Respuesta con horarios del alumno
             nombre: Nombre del alumno
             contexto_temporal: Contexto temporal detectado (ej: "mañana", "esta semana")
         """
+        # UX: Manejo de "sin clases" con tono celebratorio
         if not response.tiene_horarios:
-            if contexto_temporal:
-                return f"¡Hola {nombre}! {EMOJIS['info']} No tenés clases {contexto_temporal}."
-            return f"¡Hola {nombre}! {EMOJIS['info']} No encontré horarios registrados para vos."
+            return get_no_results_message("clases", contexto_temporal, emotional=True)
 
-        # Mensaje de encabezado adaptativo según el contexto temporal
+        # UX: Detectar contexto emocional (día libre, muchas clases, etc)
+        total_clases = len(response.horarios)
+        emotional_context = detect_schedule_context(True, total_clases)
+
+        # UX: Saludo aleatorio basado en hora del día
+        greeting = get_random_greeting(nombre, use_time_based=True)
+
+        # UX: RESPUESTA PROGRESIVA - Resumen ejecutivo primero
+        dias_count = len(response.dias_con_clases)
+
         if contexto_temporal:
-            output = f"¡Hola {nombre}! {EMOJIS['horario']} Te muestro tu horario para {contexto_temporal}:\n\n"
+            summary = f"{contexto_temporal.capitalize()} tenés **{total_clases} clase{'s' if total_clases != 1 else ''}**"
         else:
-            output = f"¡Hola {nombre}! {EMOJIS['horario']} Te muestro tu horario para esta semana:\n\n"
+            summary = f"Tenés **{total_clases} clase{'s' if total_clases != 1 else ''}** esta semana ({dias_count} días)"
 
-        # Agrupar por día usando la property dias_con_clases
+        # Detalle completo
+        detail = ""
         for dia_num in response.dias_con_clases:
             dia_nombre = DIAS_SEMANA_ES[dia_num]
             horarios_del_dia = [h for h in response.horarios if h.dia_semana == dia_num]
 
-            output += f"{EMOJIS['clase']} **{dia_nombre}**:\n"
+            detail += f"\n{EMOJIS['clase']} **{dia_nombre}**:\n"
 
             for horario in horarios_del_dia:
-                # Usar properties del modelo
-                output += f"• {horario.materia_nombre} - {horario.hora_inicio} a {horario.hora_fin}\n"
-                output += f"  {EMOJIS['aula']} Aula {horario.aula} ({horario.modalidad})\n"
+                # UX: Emoji visual mejorado para modalidad
+                modalidad_emoji = get_modalidad_emoji(horario.modalidad)
+
+                detail += f"• {horario.materia_nombre} ({horario.hora_inicio} - {horario.hora_fin})\n"
+                detail += f"  {EMOJIS['aula']} Aula {horario.aula} {modalidad_emoji}\n"
 
                 if horario.profesor_nombre:
-                    output += f"  {EMOJIS['profesor']} Prof. {horario.profesor_nombre}\n"
+                    detail += f"  {EMOJIS['profesor']} {horario.profesor_nombre}\n"
 
-                # Usar property calculada duracion_minutos
-                output += f"  ⏱️ Duración: {horario.duracion_minutos} minutos\n"
+        # UX: Cierre aleatorio
+        closing = get_random_closing()
 
-            output += "\n"
+        # Construir respuesta completa
+        body = f"{summary}\n{detail}"
 
-        output += f"¿Necesitás que te ayude con algo más? {EMOJIS['ayuda']}"
-        return output
+        # UX: Aplicar tono emocional si corresponde
+        if emotional_context:
+            body = apply_emotional_tone(body, emotional_context)
+
+        return build_response(greeting, body, closing, EMOJIS['horario'])
 
     def _format_enrollment_response(self, response: InscripcionesResponse, nombre: str) -> str:
         """Formatea la respuesta de inscripciones usando InscripcionesResponse"""
