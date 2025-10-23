@@ -125,6 +125,27 @@ logger.error(f"Error: {e}", exc_info=True)
 
 ## 🔧 Configuración de Herramientas
 
+### Filtrado de Contexto de Mensajes ⚡ NUEVO
+**Problema solucionado**: Reducir consumo de tokens enviando solo contexto relevante
+
+**Configuración** (`.env`):
+```bash
+MESSAGE_HISTORY_HOURS=24  # Solo mensajes de últimas N horas
+```
+
+**Cómo funciona**:
+- `supervisor.py:_get_filtered_message_history()` filtra mensajes por timestamp
+- Solo incluye mensajes de las últimas 24 horas (configurable)
+- Reduce significativamente el consumo de tokens
+- Mantiene contexto relevante sin información obsoleta
+
+**Logs**:
+```
+📊 Historial filtrado para {session_id}:
+   {N} mensajes únicos de {M}/{T} estados
+   (últimas 24h desde {timestamp})
+```
+
 ### n8n Webhooks
 Base URL: `https://n8n.tucbbs.com.ar/webhook`
 

@@ -654,33 +654,130 @@ Responde en máximo 3 líneas."""
             logger.error(f"Error autenticando usuario: {e}")
             return None
 
+    async def _get_filtered_message_history(
+        self,
+        session_id: str,
+        config: Dict[str, Any]
+    ) -> List[BaseMessage]:
+        """
+        Obtiene el historial de mensajes filtrado por timestamp.
+
+        Solo incluye mensajes de las últimas N horas (configurado en settings.message_history_hours).
+        Esto reduce el consumo de tokens y mantiene el contexto relevante.
+
+        Args:
+            session_id: ID de la sesión
+            config: Configuración del thread para LangGraph
+
+        Returns:
+            Lista de mensajes filtrados (BaseMessage)
+        """
+        try:
+            from datetime import timedelta
+
+            # Calcular timestamp límite (últimas N horas)
+            cutoff_time = datetime.now() - timedelta(hours=settings.message_history_hours)
+
+            # Obtener historial completo de estados del checkpointer
+            state_history = []
+            async for state in self.app.aget_state_history(config):
+                state_history.append(state)
+
+            if not state_history:
+                logger.info(f"📭 No hay historial previo para sesión {session_id}")
+                return []
+
+            # Filtrar estados por timestamp (created_at o metadata)
+            recent_messages = []
+            total_states = len(state_history)
+            filtered_states = 0
+
+            for state in state_history:
+                # Los StateSnapshot de LangGraph tienen metadata con timestamps
+                # Verificar si el estado es reciente
+                state_time = None
+
+                # Intentar obtener timestamp del checkpoint metadata
+                if hasattr(state, 'metadata') and state.metadata:
+                    # El metadata puede tener 'created_at' o 'ts' (timestamp)
+                    state_time_str = state.metadata.get('created_at') or state.metadata.get('ts')
+                    if state_time_str:
+                        try:
+                            from dateutil import parser
+                            state_time = parser.parse(state_time_str)
+                        except:
+                            pass
+
+                # Si encontramos timestamp y es reciente, incluir los mensajes
+                if state_time and state_time >= cutoff_time:
+                    if state.values and "messages" in state.values:
+                        messages = state.values["messages"]
+                        recent_messages.extend(messages)
+                        filtered_states += 1
+                elif state_time is None:
+                    # Si no hay timestamp, incluir por defecto (asumimos que es reciente)
+                    if state.values and "messages" in state.values:
+                        messages = state.values["messages"]
+                        recent_messages.extend(messages)
+                        filtered_states += 1
+
+            # Eliminar duplicados manteniendo el orden
+            # (pueden haber mensajes repetidos en diferentes checkpoints)
+            seen = set()
+            unique_messages = []
+            for msg in recent_messages:
+                msg_hash = hash((type(msg).__name__, msg.content))
+                if msg_hash not in seen:
+                    seen.add(msg_hash)
+                    unique_messages.append(msg)
+
+            logger.info(
+                f"📊 Historial filtrado para {session_id}: "
+                f"{len(unique_messages)} mensajes únicos de {filtered_states}/{total_states} estados "
+                f"(últimas {settings.message_history_hours}h desde {cutoff_time.strftime('%Y-%m-%d %H:%M')})"
+            )
+
+            return unique_messages
+
+        except Exception as e:
+            logger.warning(f"⚠️ Error filtrando historial para {session_id}: {e}")
+            logger.info(f"📭 Continuando sin contexto histórico para esta consulta")
+            # En caso de error, retornar lista vacía (solo procesará el mensaje actual)
+            return []
+
     async def process_message(self, message: str, session_id: str) -> str:
         """
         Procesa un mensaje a través del workflow LangGraph.
-        
+
         Args:
             message: Mensaje del usuario
             session_id: ID de sesión único
-            
+
         Returns:
             Respuesta del sistema
         """
         try:
-            # Estado inicial
+            # Configuración del thread
+            config = {
+                "configurable": {"thread_id": session_id},
+                "recursion_limit": 10
+            }
+
+            # NUEVO: Filtrar mensajes históricos por timestamp
+            filtered_messages = await self._get_filtered_message_history(session_id, config)
+
+            # Agregar el mensaje actual al final
+            filtered_messages.append(HumanMessage(content=message))
+
+            # Estado inicial con contexto filtrado
             initial_state: AgentState = {
-                "messages": [HumanMessage(content=message)],
+                "messages": filtered_messages,
                 "next": "authentication",
                 "user_info": {},
                 "session_id": session_id,
                 "agent_scratchpad": {},
                 "escalation_requested": False,
                 "confidence_score": 1.0
-            }
-
-            # Configuración del thread con límite de recursión (compatible con LangGraph v1.0)
-            config = {
-                "configurable": {"thread_id": session_id},
-                "recursion_limit": 10  # Reducir límite de recursión
             }
 
             # Ejecutar el workflow

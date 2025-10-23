@@ -85,6 +85,7 @@ class Settings(BaseSettings):
     session_ttl_minutes: int = 60  # Para session_manager
     session_ttl_hours: int = 2  # Para phone authentication
     max_conversation_history: int = 50
+    message_history_hours: int = 24  # Contexto: solo mensajes de las últimas N horas
     
     # ==========================================
     # SECURITY / JWT
