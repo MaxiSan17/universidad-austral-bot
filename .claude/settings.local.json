@@ -7,7 +7,8 @@
       "Bash(findstr:*)",
       "Bash(del test_message_filtering.py)",
       "Bash(python -m pytest:*)",
-      "WebFetch(domain:uxplanet.org)"
+      "WebFetch(domain:uxplanet.org)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []

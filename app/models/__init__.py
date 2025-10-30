@@ -57,18 +57,28 @@ from app.models.calendar import (
     # Enums
     TipoExamen,
     TipoEvento,
-    
+
     # Requests
     ExamenesRequest,
     CalendarioAcademicoRequest,
     ProximosExamenesRequest,
-    
+
     # Responses
     ExamenInfo,
     ExamenesResponse,
     EventoCalendario,
     CalendarioAcademicoResponse,
     ResumenExamenes,
+)
+
+# Context models (NUEVO - para LLM Response Generation)
+from app.models.context import (
+    EmotionalState,
+    QueryEntity,
+    PreviousQuery,
+    ProactiveSuggestion,
+    ConversationContext,
+    ResponseStrategy,
 )
 
 __all__ = [
@@ -133,4 +143,12 @@ __all__ = [
     'EventoCalendario',
     'CalendarioAcademicoResponse',
     'ResumenExamenes',
+
+    # Context models (NUEVO - LLM Response Generation)
+    'EmotionalState',
+    'QueryEntity',
+    'PreviousQuery',
+    'ProactiveSuggestion',
+    'ConversationContext',
+    'ResponseStrategy',
 ]

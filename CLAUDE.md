@@ -213,4 +213,227 @@ response = await repo.get_horarios_alumno(request)
 
 ---
 
-**Última actualización**: Proyecto en fase de migración completa a Pydantic Models (completado)
+## 🤖 Sistema de Respuestas LLM (NUEVO - Octubre 2025)
+
+### 🎯 Objetivo
+
+Transformar el bot de respuestas basadas en templates rígidos a **respuestas generadas por LLM** que sean:
+- Naturales y conversacionales
+- Contextuales (usan historial de 24h)
+- Selectivas (responden solo lo preguntado)
+- Empáticas (adaptan tono según emoción/urgencia)
+- Proactivas (sugieren información útil relacionada)
+
+### 📊 Arquitectura
+
+**Flujo anterior (templates)**:
+```
+Usuario → Agent → Tool (datos) → Template Formatter → Usuario
+```
+
+**Flujo nuevo (LLM)**:
+```
+Usuario → Agent → Tool (datos) → LLM Response Generator → Usuario
+                                         ↑
+                                 Context Enhancer
+                                 (historial 24h + emociones + proactividad)
+```
+
+### 📁 Nuevos Módulos
+
+#### 1. `app/models/context.py`
+Modelos Pydantic para contexto conversacional enriquecido:
+- `EmotionalState` - Estado emocional (tono, urgencia, empatía)
+- `QueryEntity` - Entidades extraídas (aula, horario, profesor)
+- `ConversationContext` - Contexto completo (historial, emociones, sugerencias)
+- `ResponseStrategy` - Estrategia de respuesta (longitud, tono, formato)
+
+#### 2. `app/prompts/system_prompts.py`
+System prompts estructurados para el LLM:
+- Prompts base por agent (academic, calendar)
+- Instrucciones de tono emocional (urgente, celebración, empatía, ánimo)
+- Instrucciones de longitud (short, medium, detailed, auto)
+- **Instrucciones de selectividad** (CRÍTICO: responder solo lo preguntado)
+- Instrucciones de proactividad y referencias históricas
+
+#### 3. `app/utils/llm_response_generator.py`
+Generador principal de respuestas con LLM:
+- `LLMResponseGenerator` class - Generador principal
+- `generate_natural_response()` - Helper function para uso fácil
+- `should_use_llm_generation()` - Determina si usar LLM vs templates
+- `determine_data_complexity()` - Analiza complejidad de datos
+
+#### 4. `app/utils/response_strategy.py`
+Analiza queries y determina estrategia de respuesta:
+- `QueryEntityExtractor` - Extrae entidades (aula, horario, profesor)
+- `ResponseStrategyBuilder` - Construye estrategia completa
+- `build_response_strategy()` - Helper function
+
+#### 5. `app/utils/context_enhancer.py`
+Enriquece contexto conversacional:
+- `ContextEnhancer` class - Enriquecedor principal
+- Extrae historial relevante (últimas 24h)
+- Detecta estado emocional
+- Genera sugerencias proactivas
+- `enhance_conversation_context()` - Helper function
+
+### ⚙️ Configuración (.env)
+
+```bash
+# LLM Response Generation
+RESPONSE_GENERATION_MODE=llm  # "llm", "template", "hybrid"
+LLM_RESPONSE_MODEL=gpt-4o-mini  # Opcional, usa LLM_MODEL si no se especifica
+LLM_RESPONSE_TEMPERATURE=0.5  # Balance creatividad/precisión
+MAX_RESPONSE_TOKENS=500
+
+# Context Enhancement
+ENABLE_CONTEXT_ENHANCEMENT=true
+CONTEXT_LOOKBACK_HOURS=24  # Historial conversacional
+ENABLE_PROACTIVE_SUGGESTIONS=true
+
+# Response Strategy
+ENABLE_SMART_FILTERING=true  # LLM filtra datos relevantes
+DEFAULT_RESPONSE_LENGTH=auto  # "short", "medium", "detailed", "auto"
+```
+
+### 🔄 Integración en Agents
+
+**Ejemplo en `academic_agent.py`** (método `_handle_schedules`):
+
+```python
+# Obtener datos del tool
+result_dict = await self.tools.consultar_horarios(params)
+response = HorariosResponse(**result_dict)
+
+# Verificar si usar LLM generation
+if should_use_llm_generation():
+    # Obtener sesión
+    session = session_manager.get_session(session_id)
+
+    # Enriquecer contexto
+    context = await enhance_conversation_context(
+        current_query=query,
+        query_type="horarios",
+        user_name=user_info["nombre"],
+        session=session,
+        data=response
+    )
+
+    # Construir estrategia
+    strategy, entities = build_response_strategy(
+        query=query,
+        data=response,
+        context=context
+    )
+
+    # Generar respuesta natural
+    natural_response = await generate_natural_response(
+        data=response,
+        original_query=query,
+        user_name=user_info["nombre"],
+        query_type="horarios",
+        agent_type="academic",
+        context=context,
+        strategy=strategy
+    )
+
+    # Actualizar contexto en sesión
+    session.update_query_context(
+        query=query,
+        query_type="horarios",
+        query_data={"materia": materia, "temporal": contexto_temporal},
+        response_summary=natural_response[:100]
+    )
+
+    return natural_response
+else:
+    # Fallback a templates
+    return self._format_schedule_response(response, nombre, contexto_temporal)
+```
+
+### 📊 Comparación de Respuestas
+
+**Pregunta**: "¿En qué aula tengo ética?"
+
+**Antes (template rígido)**:
+```
+📚 Horarios de Juan
+
+• Ética y Deontología (14:00 - 16:00)
+  📍 Aula R3 🏫
+  👨‍🏫 Prof. García Martínez
+  ⏱️ Duración: 120 minutos
+
+¿Algo más? 🤝
+```
+
+**Después (LLM selectivo)**:
+```
+Tu clase de Ética es en el aula R3 📍
+
+(Es los viernes a las 14hs con García Martínez)
+```
+
+**Pregunta**: "¿Cuándo tengo clases mañana?"
+
+**Después (LLM con proactividad)**:
+```
+Mañana tenés un día bastante cargado con 3 materias 💪
+
+14:00 - Ética (R3)
+16:00 - Programación I (L2)
+18:30 - Matemática Discreta (R1)
+
+Ah, y acordate que tenés el parcial de Nativa Digital el lunes 🟡
+¿Querés que te recuerde el aula?
+```
+
+### ✅ Testing
+
+Ejecutar test de validación:
+```bash
+python test_llm_response_system.py
+```
+
+El test valida:
+1. ✅ Imports de módulos nuevos
+2. ✅ Configuraciones cargadas correctamente
+3. ✅ Modelos Pydantic funcionando
+4. ✅ Extractores de entidades
+5. ✅ Generación de prompts
+6. ✅ Determinación de complejidad
+
+### 🎯 Características Clave
+
+1. **Selectividad Inteligente**: El LLM analiza la pregunta y responde SOLO lo solicitado
+2. **Contexto Conversacional**: Usa historial de 24h para hacer referencias ("como te dije antes...")
+3. **Adaptación Emocional**: Ajusta tono según urgencia (examen mañana) o celebración (día libre)
+4. **Proactividad Contextual**: Sugiere información útil relacionada automáticamente
+5. **Variación de Longitud**: Respuestas cortas para preguntas simples, detalladas para complejas
+6. **Fallback Seguro**: Si LLM falla, usa templates legacy como backup
+
+### ⚠️ Implicaciones
+
+**Ventajas**:
+- Naturalidad máxima en respuestas
+- Mejor experiencia de usuario
+- Flexibilidad total ante queries complejas
+- Contexto conversacional rico
+
+**Trade-offs**:
+- Latencia: +1-2s por respuesta (total: 2-4s)
+- Costo: ~$0.001-0.003 por respuesta
+- Tokens: 500-1500 tokens/respuesta (vs ~50 con templates)
+- Variabilidad: Menos predecible (requiere prompt engineering)
+
+### 🚀 Próximos Pasos
+
+1. **Migración completa**: Integrar LLM generator en calendar_agent.py
+2. **Optimización de prompts**: Ajustar system prompts basado en feedback
+3. **A/B Testing**: Comparar satisfacción usuario con templates vs LLM
+4. **Memoria de largo plazo**: Integrar Memory MCP para recordar preferencias del usuario
+5. **Streaming**: Implementar streaming de tokens para mejor UX
+
+---
+
+**Última actualización**: Sistema de Respuestas LLM implementado (Octubre 2025)

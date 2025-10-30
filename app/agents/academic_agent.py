@@ -1,6 +1,7 @@
 """
 Agente académico usando Pydantic Models para mejor tipado y formateo.
 Incluye mejoras de UX 2.0: variación de tono, emojis visuales, respuestas progresivas.
+NUEVO: Integración con LLM Response Generator para respuestas naturales y contextuales.
 """
 from typing import Dict, Any, Optional
 from datetime import date
@@ -16,6 +17,7 @@ from app.models import (
 )
 from app.core import DIAS_SEMANA_ES, EMOJIS
 from app.core.llm_factory import llm_factory
+from app.core.config import settings
 from app.utils.logger import get_logger
 from app.utils.temporal_parser import temporal_parser
 from app.utils.response_formatter import (
@@ -32,6 +34,11 @@ from app.utils.emotional_tone import (
     get_no_results_message
 )
 from app.session.session_manager import session_manager
+
+# NUEVO: Imports para LLM Response Generation
+from app.utils.llm_response_generator import generate_natural_response, should_use_llm_generation
+from app.utils.context_enhancer import enhance_conversation_context
+from app.utils.response_strategy import build_response_strategy
 
 logger = get_logger(__name__)
 
@@ -309,7 +316,11 @@ TONO: Amigable, informativo y profesional. Usa emojis apropiados.
         return "general"
 
     async def _handle_schedules(self, query: str, user_info: Dict[str, Any]) -> str:
-        """Maneja consultas sobre horarios usando HorariosResponse"""
+        """
+        Maneja consultas sobre horarios usando HorariosResponse.
+
+        NUEVO: Integra LLM Response Generator para respuestas naturales y contextuales.
+        """
         try:
             # Parámetros para la herramienta
             params = {"alumno_id": user_info["id"]}
@@ -344,7 +355,59 @@ TONO: Amigable, informativo y profesional. Usa emojis apropiados.
             if result_dict and result_dict.get("horarios"):
                 # Convertir dict a modelo Pydantic para aprovechar properties
                 response = HorariosResponse(**result_dict)
-                return self._format_schedule_response(response, user_info["nombre"], contexto_temporal)
+
+                # ===== NUEVO: LLM RESPONSE GENERATION =====
+                # Verificar si usar LLM generation
+                if should_use_llm_generation():
+                    logger.info("🤖 Usando LLM Response Generator para horarios")
+
+                    # Obtener sesión actual
+                    session_id = user_info.get("session_id", "unknown")
+                    session = session_manager.get_session(session_id)
+
+                    # Enriquecer contexto conversacional
+                    context = await enhance_conversation_context(
+                        current_query=query,
+                        query_type="horarios",
+                        user_name=user_info["nombre"],
+                        session=session,
+                        data=response,
+                        temporal_context=contexto_temporal
+                    )
+
+                    # Construir estrategia de respuesta
+                    strategy, entities = build_response_strategy(
+                        query=query,
+                        data=response,
+                        context=context
+                    )
+
+                    # Generar respuesta natural con LLM
+                    natural_response = await generate_natural_response(
+                        data=response,
+                        original_query=query,
+                        user_name=user_info["nombre"],
+                        query_type="horarios",
+                        agent_type="academic",
+                        context=context,
+                        strategy=strategy
+                    )
+
+                    # Actualizar contexto en sesión para referencias futuras
+                    session.update_query_context(
+                        query=query,
+                        query_type="horarios",
+                        query_data={"materia": materia_detectada, "temporal": contexto_temporal},
+                        response_summary=natural_response[:100]  # Guardar primeras 100 chars
+                    )
+
+                    return natural_response
+
+                # ===== LEGACY: Template-based response (fallback) =====
+                else:
+                    logger.info("📋 Usando template-based response (legacy mode)")
+                    return self._format_schedule_response(response, user_info["nombre"], contexto_temporal)
+
             else:
                 return f"¡Hola {user_info['nombre']}! 😅 No pude encontrar información sobre tus horarios en este momento."
 

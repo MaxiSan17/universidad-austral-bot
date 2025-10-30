@@ -150,6 +150,23 @@ class Settings(BaseSettings):
     enable_calendar_tools: bool = True
     enable_financial_tools: bool = False
     enable_policies_tools: bool = True  # ✅ Habilitado - búsqueda vectorial en Supabase
+
+    # ==========================================
+    # LLM RESPONSE GENERATION (NUEVO)
+    # ==========================================
+    response_generation_mode: str = "llm"  # opciones: "llm", "template", "hybrid"
+    llm_response_model: Optional[str] = None  # None = usar llm_model por defecto
+    llm_response_temperature: float = 0.5  # Más creativo que clasificación
+    max_response_tokens: int = 500  # Límite de tokens para respuestas
+
+    # Context Enhancement
+    enable_context_enhancement: bool = True  # Enriquecimiento de contexto conversacional
+    context_lookback_hours: int = 24  # Horas de historial a considerar (ya existe como message_history_hours)
+    enable_proactive_suggestions: bool = True  # Sugerencias proactivas
+
+    # Response Strategy
+    enable_smart_filtering: bool = True  # Filtrado inteligente de información relevante
+    default_response_length: str = "auto"  # "short", "medium", "detailed", "auto"
     
     # ==========================================
     # UNIVERSIDAD ESPECÍFICO
