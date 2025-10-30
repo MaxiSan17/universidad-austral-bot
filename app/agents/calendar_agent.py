@@ -1,5 +1,6 @@
 """
-Agente de calendario usando Pydantic Models para mejor tipado y formateo
+Agente de calendario usando Pydantic Models para mejor tipado y formateo.
+NUEVO: Integración con LLM Response Generator para respuestas naturales y contextuales.
 """
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
@@ -14,7 +15,14 @@ from app.models import (
 )
 from app.core import DIAS_SEMANA_ES, MESES_ES, EMOJIS
 from app.core.llm_factory import llm_factory
+from app.core.config import settings
 from app.utils.logger import get_logger
+from app.session.session_manager import session_manager
+
+# NUEVO: Imports para LLM Response Generation
+from app.utils.llm_response_generator import generate_natural_response, should_use_llm_generation
+from app.utils.context_enhancer import enhance_conversation_context
+from app.utils.response_strategy import build_response_strategy
 
 logger = get_logger(__name__)
 
@@ -233,7 +241,11 @@ RESPUESTA (una palabra):"""
         return "general"
 
     async def _handle_exams(self, query: str, user_info: Dict[str, Any]) -> str:
-        """Maneja consultas sobre exámenes usando ExamenesResponse"""
+        """
+        Maneja consultas sobre exámenes usando ExamenesResponse.
+
+        NUEVO: Integra LLM Response Generator para respuestas naturales y contextuales.
+        """
         try:
             params = {
                 "alumno_id": user_info["id"],
@@ -266,10 +278,63 @@ RESPUESTA (una palabra):"""
                 # Convertir a modelo Pydantic
                 response = ExamenesResponse(**result_dict)
 
-                # Detectar si es respuesta de "solo próximo" para personalizar mensaje
-                solo_proximo = len(response.examenes) == 1 and 'próximo' in query.lower()
+                # ===== NUEVO: LLM RESPONSE GENERATION =====
+                # Verificar si usar LLM generation
+                if should_use_llm_generation():
+                    logger.info("🤖 Usando LLM Response Generator para exámenes")
 
-                return self._format_exams_response(response, user_info["nombre"], solo_proximo=solo_proximo)
+                    # Obtener sesión actual
+                    session_id = user_info.get("session_id", "unknown")
+                    session = session_manager.get_session(session_id)
+
+                    # Detectar contexto temporal
+                    solo_proximo = len(response.examenes) == 1 and 'próximo' in query.lower()
+                    contexto_temporal = "próximo examen" if solo_proximo else None
+
+                    # Enriquecer contexto conversacional
+                    context = await enhance_conversation_context(
+                        current_query=query,
+                        query_type="examenes",
+                        user_name=user_info["nombre"],
+                        session=session,
+                        data=response,
+                        temporal_context=contexto_temporal
+                    )
+
+                    # Construir estrategia de respuesta
+                    strategy, entities = build_response_strategy(
+                        query=query,
+                        data=response,
+                        context=context
+                    )
+
+                    # Generar respuesta natural con LLM
+                    natural_response = await generate_natural_response(
+                        data=response,
+                        original_query=query,
+                        user_name=user_info["nombre"],
+                        query_type="examenes",
+                        agent_type="calendar",
+                        context=context,
+                        strategy=strategy
+                    )
+
+                    # Actualizar contexto en sesión para referencias futuras
+                    session.update_query_context(
+                        query=query,
+                        query_type="examenes",
+                        query_data={"materia": materia, "tipo": tipo},
+                        response_summary=natural_response[:100]  # Guardar primeras 100 chars
+                    )
+
+                    return natural_response
+
+                # ===== LEGACY: Template-based response (fallback) =====
+                else:
+                    logger.info("📋 Usando template-based response (legacy mode)")
+                    solo_proximo = len(response.examenes) == 1 and 'próximo' in query.lower()
+                    return self._format_exams_response(response, user_info["nombre"], solo_proximo=solo_proximo)
+
             else:
                 materia_text = f" de {materia}" if materia else ""
                 return f"{EMOJIS['examen']} ¡Hola {user_info['nombre']}!\n\n{EMOJIS['info']} No encontré exámenes{materia_text} para las fechas solicitadas.\n\n¿Necesitás información sobre otra fecha o materia? {EMOJIS['ayuda']}"

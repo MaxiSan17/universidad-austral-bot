@@ -426,13 +426,26 @@ El test valida:
 - Tokens: 500-1500 tokens/respuesta (vs ~50 con templates)
 - Variabilidad: Menos predecible (requiere prompt engineering)
 
+### ✅ Estado de Integración
+
+**Agents con LLM Response Generator integrado**:
+- ✅ **Academic Agent** - Consultas de horarios (`_handle_schedules`)
+- ✅ **Calendar Agent** - Consultas de exámenes (`_handle_exams`)
+
+**Agents pendientes** (usando templates legacy):
+- ⏳ Academic Agent - Inscripciones, profesores, aulas, créditos VU
+- ⏳ Calendar Agent - Eventos, feriados
+- ⏳ Financial Agent - Pagos, deudas
+- ⏳ Policies Agent - Reglamentos, syllabi
+
 ### 🚀 Próximos Pasos
 
-1. **Migración completa**: Integrar LLM generator en calendar_agent.py
-2. **Optimización de prompts**: Ajustar system prompts basado en feedback
-3. **A/B Testing**: Comparar satisfacción usuario con templates vs LLM
-4. **Memoria de largo plazo**: Integrar Memory MCP para recordar preferencias del usuario
-5. **Streaming**: Implementar streaming de tokens para mejor UX
+1. ✅ ~~Migración completa: Integrar LLM generator en calendar_agent.py~~ **COMPLETADO**
+2. **Migración incremental**: Integrar en resto de métodos de academic y calendar agents
+3. **Optimización de prompts**: Ajustar system prompts basado en feedback de usuarios reales
+4. **A/B Testing**: Comparar satisfacción usuario con templates vs LLM
+5. **Memoria de largo plazo**: Integrar Memory MCP para recordar preferencias del usuario
+6. **Streaming**: Implementar streaming de tokens para mejor UX
 
 ---
 
