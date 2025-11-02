@@ -137,6 +137,16 @@ class LLMFactory:
 
         logger.info(f"Creando LLM: provider={provider}, model={model}, temperature={temperature}")
 
+        # Log adicional para verificar API keys
+        if provider == "anthropic":
+            api_key_present = settings.ANTHROPIC_API_KEY is not None and len(settings.ANTHROPIC_API_KEY or "") > 0
+            logger.info(f"🔑 ANTHROPIC_API_KEY configurada: {api_key_present}")
+            if api_key_present:
+                logger.info(f"🔑 ANTHROPIC_API_KEY (primeros 20 chars): {settings.ANTHROPIC_API_KEY[:20]}...")
+        elif provider == "openai":
+            api_key_present = settings.OPENAI_API_KEY is not None and len(settings.OPENAI_API_KEY or "") > 0
+            logger.info(f"🔑 OPENAI_API_KEY configurada: {api_key_present}")
+
         try:
             # Crear kwargs combinados
             combined_kwargs = {
@@ -144,20 +154,26 @@ class LLMFactory:
                 "temperature": temperature,
                 **kwargs
             }
-            
-            return provider_instance.create_llm(**combined_kwargs)
-            
+
+            logger.info(f"📤 Intentando crear LLM con provider '{provider}'...")
+            result = provider_instance.create_llm(**combined_kwargs)
+            logger.info(f"✅ LLM de {provider} creado exitosamente")
+            return result
+
         except Exception as e:
-            logger.error(f"Error creando LLM: {e}")
+            logger.error(f"❌ Error creando LLM de {provider}: {e}", exc_info=True)
+            logger.error(f"❌ Tipo de error: {type(e).__name__}")
+            logger.error(f"❌ Detalles completos del error: {str(e)}")
+
             # Fallback a OpenAI con configuración mínima
-            logger.info("Usando OpenAI como fallback")
+            logger.warning("⚠️ Haciendo fallback a OpenAI debido al error anterior")
             try:
                 return cls._providers["openai"].create_llm(
                     model="gpt-4o-mini",
                     temperature=temperature
                 )
             except Exception as fallback_error:
-                logger.error(f"Error en fallback: {fallback_error}")
+                logger.error(f"❌ Error en fallback a OpenAI: {fallback_error}", exc_info=True)
                 raise
 
     @classmethod
@@ -165,13 +181,19 @@ class LLMFactory:
         """Infiere el proveedor desde la configuración"""
         model = settings.LLM_MODEL.lower()
 
+        logger.info(f"🔍 Detectando provider desde LLM_MODEL: {settings.LLM_MODEL}")
+
         if "gpt" in model or "openai" in model:
+            logger.info(f"✅ Provider detectado: openai (model={settings.LLM_MODEL})")
             return "openai"
         elif "claude" in model or "anthropic" in model:
+            logger.info(f"✅ Provider detectado: anthropic (model={settings.LLM_MODEL})")
             return "anthropic"
         elif "gemini" in model or "google" in model:
+            logger.info(f"✅ Provider detectado: google (model={settings.LLM_MODEL})")
             return "google"
         else:
+            logger.warning(f"⚠️ No se detectó provider conocido en '{settings.LLM_MODEL}', usando openai por defecto")
             return "openai"  # Default
 
     @classmethod
