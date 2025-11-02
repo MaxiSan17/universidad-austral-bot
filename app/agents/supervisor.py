@@ -261,7 +261,7 @@ IMPORTANTE: Si el usuario saluda PERO también hace una consulta específica (ej
 
 ## 🎓 ACADEMIC (Agente Académico)
 Responsable de:
-- Horarios de clases y cursada
+- Horarios de clases y cursada **con contexto temporal** (hoy, mañana, esta semana)
 - Materias inscriptas y disponibles
 - Información de profesores
 - Ubicación de aulas y salones
@@ -271,6 +271,7 @@ Responsable de:
 
 Ejemplos de consultas:
 - "¿Cuándo tengo clases?"
+- "¿Qué curso/clase tengo hoy/mañana?" ⚠️ CLAVE: temporal + "curso" = horarios (academic)
 - "¿A qué hora curso [materia]?"
 - "¿En qué aula tengo clase?"
 - "¿Quién es el profesor de [materia]?"
@@ -278,6 +279,7 @@ Ejemplos de consultas:
 - "¿Cuántos créditos VU tengo?"
 - "¿Dónde es la clase de mañana?"
 - "Horario de [materia]"
+- "Qué tengo mañana" (horarios del día siguiente)
 
 ## 📅 CALENDAR (Agente de Calendario)
 Responsable de:
@@ -347,14 +349,20 @@ Cuando:
 1. **Lee la consulta completa** del usuario
 2. **Identifica las palabras clave** más importantes
 3. **Detecta la intención principal** (¿qué quiere saber/hacer?)
-4. **Considera el contexto temporal**:
-   - "cuándo" + "parcial/final/examen" → calendar
-   - "cuándo" + "clase/horario" → academic
-5. **Elige el agente MÁS específico** que puede responder
-6. **Si hay duda entre dos agentes**, prioriza:
-   - calendar > academic (si menciona exámenes o fechas)
-   - academic > policies (si menciona info práctica vs teórica)
+4. **Considera el contexto temporal** (CRÍTICO):
+   - "cuándo/cuando es" + "parcial/final/examen" → **calendar**
+   - Temporal (hoy/mañana/semana) + "clase/curso/horario/materia" → **academic**
+   - ⚠️ "que curso mañana" = pregunta por HORARIO del día siguiente → **academic**
+   - ⚠️ "cuando tengo clases" = pregunta por HORARIO → **academic**
+   - ⚠️ Solo si pregunta por FECHAS de exámenes → **calendar**
+5. **Palabras sinónimas** (tratar igual):
+   - "curso" = "clase" = "cursada" = "materia" (en contexto de horarios)
+6. **Elige el agente MÁS específico** que puede responder
+7. **Si hay duda entre dos agentes**, prioriza:
+   - academic (si pregunta por horarios/clases con temporalidad)
+   - calendar (solo si pregunta por FECHAS de exámenes/eventos)
    - financial siempre tiene prioridad si menciona dinero
+   - academic > policies (si menciona info práctica vs teórica)
 
 ## RESPUESTA:
 

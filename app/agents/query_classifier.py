@@ -99,11 +99,17 @@ class QueryClassifier:
                 r"(cual|cuál) es (mi|el) (proximo|próximo|siguiente).*(parcial|final|examen)"
             ],
             "academic": [
-                r"cuando (tengo|es|hay).*(clase|cursada)",
-                r"(horario|hora).*(clase|materia|cursada)",
-                r"(donde|que aula|salon).*(clase|cursada)",
-                r"(hoy|ma[ñn]ana|pasado ma[ñn]ana).*(clase|cursada)",
-                r"(esta|la) semana.*(clase|cursada)"
+                # Patrones de horarios con contexto temporal (ALTA PRIORIDAD)
+                r"(que|qu[ée]|cuales|cuáles).*(curso|clases?|cursadas?|materias?).*(hoy|ma[ñn]ana|pasado ma[ñn]ana|esta semana)",
+                r"(hoy|ma[ñn]ana|pasado ma[ñn]ana).*(tengo|tenemos|hay|es|son).*(clase|cursada|curso|materia)",
+                r"(clase|cursada|curso|materia).*(hoy|ma[ñn]ana|pasado ma[ñn]ana)",
+                r"(cuando|a que hora) (tengo|es|hay).*(clase|cursada|curso)",
+                r"(horario|hora).*(clase|materia|cursada|curso)",
+                r"(donde|que aula|salon|en que aula).*(clase|cursada|curso)",
+                r"(esta|la|proxima|próxima) semana.*(clase|cursada|curso|materia)",
+                # Casos específicos de "que curso X" (contexto temporal)
+                r"(que|qu[ée]|cual|cuál) (curso|clase|materia).*(hoy|ma[ñn]ana|pasado|esta semana|ahora|despues|después)",
+                r"(hoy|ma[ñn]ana|ahora|después|despues|luego).*(que|qu[ée]).*(curso|clase|materia)"
             ]
         }
     
