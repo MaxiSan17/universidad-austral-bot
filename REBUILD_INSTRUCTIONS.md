@@ -14,7 +14,7 @@
 ```bash
 # Modelo LLM - Claude 3.5 Sonnet (con créditos disponibles en Anthropic)
 LLM_MODEL=claude-3-5-sonnet-20241022
-ANTHROPIC_API_KEY=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
+ANTHROPIC_API_KEY=tu_api_key_de_anthropic_aqui
 
 # LLM Response Generation - Usar Claude 3.5 Sonnet
 RESPONSE_GENERATION_MODE=llm
@@ -25,6 +25,8 @@ ENABLE_CONTEXT_ENHANCEMENT=true
 ENABLE_PROACTIVE_SUGGESTIONS=true
 ENABLE_SMART_FILTERING=true
 ```
+
+**⚠️ IMPORTANTE**: La API key real está configurada en tu archivo `.env` (que NO se commitea a git por seguridad).
 
 **¿Por qué Claude?**
 - ✅ Tenés créditos cargados en Anthropic (no más error 429)
