@@ -1,24 +1,24 @@
-# 🔄 Instrucciones de Rebuild - Corrección de Bugs
+# 🔄 Instrucciones de Rebuild - Migración a Claude (Anthropic)
 
 ## 🐛 Problemas Corregidos
 
-1. **Error de cuota OpenAI (429)**: Estaba usando `gpt-4o` (caro), ahora usa `gpt-4o-mini` (barato) ✅
+1. **Error de cuota OpenAI (429)**: Migrado a Claude 3.5 Sonnet con créditos disponibles ✅
 2. **Clasificación incorrecta**: "que curso mañana" ahora se clasifica como `horarios` ✅
-3. **Respuestas con templates**: Ahora usa LLM para respuestas naturales ✅
+3. **Respuestas con templates**: Ahora usa Claude para respuestas naturales de alta calidad ✅
 
 ---
 
 ## ⚙️ Cambios Realizados
 
-### 1. `.env` - Nuevas configuraciones
+### 1. `.env` - Configuración de Anthropic
 ```bash
-# Modelo LLM - Usar gpt-4o-mini (barato, con cuota disponible)
-LLM_MODEL=gpt-4o-mini
-OPENAI_API_KEY=tu_openai_key_actual
+# Modelo LLM - Claude 3.5 Sonnet (con créditos disponibles en Anthropic)
+LLM_MODEL=claude-3-5-sonnet-20241022
+ANTHROPIC_API_KEY=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
 
-# LLM Response Generation - Usar MISMO modelo (gpt-4o-mini)
+# LLM Response Generation - Usar Claude 3.5 Sonnet
 RESPONSE_GENERATION_MODE=llm
-LLM_RESPONSE_MODEL=gpt-4o-mini  # ✅ Ahora usa el modelo barato
+LLM_RESPONSE_MODEL=claude-3-5-sonnet-20241022
 LLM_RESPONSE_TEMPERATURE=0.5
 MAX_RESPONSE_TOKENS=500
 ENABLE_CONTEXT_ENHANCEMENT=true
@@ -26,10 +26,11 @@ ENABLE_PROACTIVE_SUGGESTIONS=true
 ENABLE_SMART_FILTERING=true
 ```
 
-**¿Por qué funcionaba antes?**
-- El error 429 era porque intentaba usar `gpt-4o` (que es caro y no tenés cuota)
-- Ahora usa `gpt-4o-mini` para TODO (clasificación + respuestas)
-- `gpt-4o-mini` es mucho más barato y probablemente tengás cuota disponible
+**¿Por qué Claude?**
+- ✅ Tenés créditos cargados en Anthropic (no más error 429)
+- ✅ Claude 3.5 Sonnet es excelente para respuestas naturales en español
+- ✅ Mejor comprensión de contexto que GPT-4o-mini
+- ✅ Menos alucinaciones y respuestas más precisas
 
 ### 2. `query_classifier.py` - Nuevos patrones temporales
 - Agregados 9 patrones para detectar "curso" + contexto temporal
@@ -48,8 +49,8 @@ ENABLE_SMART_FILTERING=true
 
 ## 🚀 Pasos para Aplicar Cambios
 
-### ✅ Sin Pasos Adicionales Necesarios
-Tu API key de OpenAI actual ya está configurada. Solo necesitás hacer el rebuild.
+### ✅ API Key de Anthropic Configurada
+La API key de Claude ya está configurada en el `.env`. Solo necesitás hacer el rebuild.
 
 ---
 
@@ -88,7 +89,7 @@ docker-compose logs -f university-agent
 ### 1. Verificar configuración LLM
 Buscá en los logs estas líneas al iniciar:
 ```
-LLMResponseGenerator inicializado: model=gpt-4o-mini, temp=0.5
+LLMResponseGenerator inicializado: model=claude-3-5-sonnet-20241022, temp=0.5
 ```
 
 ### 2. Probar clasificación con "que curso mañana"
@@ -117,20 +118,20 @@ La respuesta debería ser conversacional, no con bullets rígidos:
 
 ### LLM Response Generation:
 ```
-2025-11-02 21:45:11 - app.agents.academic_agent - INFO - 🤖 Usando LLM Response Generator para horarios
-2025-11-02 21:45:11 - app.utils.llm_response_generator - INFO - 🤖 Generando respuesta con LLM: agent=academic, type=horarios
-2025-11-02 21:45:11 - app.core.llm_factory - INFO - Creando LLM: provider=openai, model=gpt-4o-mini, temperature=0.5
-2025-11-02 21:45:13 - app.utils.llm_response_generator - INFO - ✅ Respuesta generada (245 chars)
+2025-11-02 22:00:11 - app.agents.academic_agent - INFO - 🤖 Usando LLM Response Generator para horarios
+2025-11-02 22:00:11 - app.utils.llm_response_generator - INFO - 🤖 Generando respuesta con LLM: agent=academic, type=horarios
+2025-11-02 22:00:11 - app.core.llm_factory - INFO - Creando LLM: provider=anthropic, model=claude-3-5-sonnet-20241022, temperature=0.5
+2025-11-02 22:00:13 - app.utils.llm_response_generator - INFO - ✅ Respuesta generada (245 chars)
 ```
 
 ---
 
 ## ⚠️ Troubleshooting
 
-### Error 429: "insufficient_quota"
-- Tu API key de OpenAI no tiene cuota disponible
-- Verificá en: https://platform.openai.com/account/usage
-- Agregá créditos o usá otra API key
+### Error 429: "insufficient_quota" (Anthropic)
+- Tu API key de Anthropic no tiene créditos disponibles
+- Verificá en: https://console.anthropic.com/settings/billing
+- Agregá créditos a tu cuenta de Anthropic
 
 ### Sigue usando templates
 - No hiciste rebuild con `--no-cache`
