@@ -231,9 +231,10 @@ TONO: Amigable, informativo y profesional. Usa emojis apropiados.
         Clasifica el tipo de consulta académica con tolerancia a typos.
 
         Estrategia de tres niveles:
-        1. Match exacto con keywords (más rápido)
-        2. Fuzzy matching para typos (tolerante)
-        3. LLM fallback en process_query si es "general"
+        1. Contexto temporal (PRIORIDAD MÁXIMA para horarios)
+        2. Match exacto con keywords (más rápido)
+        3. Fuzzy matching para typos (tolerante)
+        4. LLM fallback en process_query si es "general"
 
         Args:
             query: Query normalizado (lowercase)
@@ -243,13 +244,13 @@ TONO: Amigable, informativo y profesional. Usa emojis apropiados.
         """
         # Definir keywords por categoría
         horarios_kw = [
-            "horario", "horarios", "clase", "clases",
-            "cuando", "cuándo", "hora", "tengo"
+            "horario", "horarios", "clase", "clases", "cursada", "cursadas",
+            "cuando", "cuándo", "hora", "tengo", "curso", "curso"
         ]
 
         inscripciones_kw = [
             "inscripción", "inscripcion", "inscripto", "inscripta",
-            "materias", "materia", "cursando", "curso"
+            "materias", "materia", "cursando"
         ]
 
         profesores_kw = [
@@ -266,6 +267,23 @@ TONO: Amigable, informativo y profesional. Usa emojis apropiados.
             "credito", "creditos", "crédito", "créditos",
             "vu", "vida universitaria", "actividades"
         ]
+
+        # Keywords de contexto temporal (indicadores de horarios)
+        temporal_kw = [
+            "hoy", "mañana", "manana", "pasado mañana", "pasado manana",
+            "esta semana", "semana que viene", "proximo", "próximo",
+            "siguiente", "lunes", "martes", "miercoles", "miércoles",
+            "jueves", "viernes", "sabado", "sábado", "domingo"
+        ]
+
+        # NIVEL 0: Detectar contexto temporal + curso/clase/materia → horarios (MÁXIMA PRIORIDAD)
+        # Esto resuelve "que curso mañana", "que clases tengo hoy", etc.
+        tiene_temporal = any(kw in query for kw in temporal_kw)
+        tiene_curso_clase = any(kw in query for kw in ["curso", "curso", "clase", "clases", "cursada", "materia"])
+
+        if tiene_temporal and tiene_curso_clase:
+            logger.debug("🎯 Contexto temporal + curso/clase detectado → horarios (PRIORIDAD)")
+            return "horarios"
 
         # NIVEL 1: Match exacto (más rápido)
         if any(kw in query for kw in horarios_kw):
