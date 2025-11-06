@@ -1,7 +1,7 @@
 import logging
 import sys
 from typing import Optional
-from app.config import settings
+from app.core.config import settings
 
 def setup_logging() -> None:
     """Configura el sistema de logging global"""
